@@ -143,7 +143,7 @@ describe('rattachement du filleul', () => {
 
   it('REFUSE l’auto-parrainage', async () => {
     // La fraude la plus évidente du programme : s'inscrire avec son propre
-    // lien pour toucher 25 % sur ses propres achats.
+    // lien pour toucher 30 % sur ses propres achats.
     h.cookieJar.set(REFERRAL_COOKIE, 'AAAA1111');
     expect(await attachPendingReferral('parrain')).toBeNull();
     expect(h.users.get('parrain')?.referredById).toBeNull();
@@ -200,21 +200,21 @@ describe('gain de commission', () => {
     addUser('filleul', { referredById: 'parrain' });
   });
 
-  it('inscrit 25 % de l’achat au profit du parrain', async () => {
+  it('inscrit 30 % de l’achat au profit du parrain', async () => {
     const gained = await accrueCommission(makeTx(), {
       refereeId: 'filleul',
       orderId: 'ord_1',
       amountFcfa: 3_000,
     });
 
-    expect(gained).toBe(750);
+    expect(gained).toBe(900);
     expect(h.commissions).toHaveLength(1);
     expect(h.commissions[0]).toMatchObject({
       referrerId: 'parrain',
       refereeId: 'filleul',
       orderId: 'ord_1',
       orderAmount: 3_000,
-      amount: 750,
+      amount: 900,
       status: 'EARNED',
     });
   });
@@ -243,7 +243,7 @@ describe('gain de commission', () => {
       amountFcfa: 9_000,
     });
 
-    expect(first).toBe(2_250);
+    expect(first).toBe(2_700);
     expect(second).toBe(0);
     expect(h.commissions).toHaveLength(1);
   });
@@ -261,7 +261,7 @@ describe('gain de commission', () => {
 
     expect(h.commissions).toHaveLength(1);
     expect(results.filter((r) => r > 0)).toHaveLength(1);
-    expect(results.reduce((a, b) => a + b, 0)).toBe(7_500);
+    expect(results.reduce((a, b) => a + b, 0)).toBe(9_000);
   });
 
   it('ne fait rien pour un acheteur sans parrain', async () => {
@@ -294,7 +294,7 @@ describe('gain de commission', () => {
   });
 
   it('n’inscrit rien pour un montant qui n’ouvre aucun droit', async () => {
-    // 3 FCFA × 25 % = 0,75, arrondi à 0. Une ligne à zéro polluerait le
+    // 3 FCFA × 30 % = 0,9, arrondi à 0. Une ligne à zéro polluerait le
     // relevé du parrain sans rien lui apporter.
     expect(
       await accrueCommission(makeTx(), { refereeId: 'filleul', orderId: 'ord_4', amountFcfa: 3 }),

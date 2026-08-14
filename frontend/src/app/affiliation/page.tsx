@@ -1,6 +1,11 @@
 'use client';
 
-// Affiliation — le créateur partage son lien, touche 25 % à vie.
+// Affiliation — le créateur partage son lien, touche 30 % à vie.
+//
+// Le taux n'est jamais écrit en dur dans le rendu : il vient de `rateBps`
+// renvoyé par l'API, avec `ratePercent()` du module partagé en repli. Deux
+// copies du barème dériveraient, et c'est la promesse faite au parrain qui
+// deviendrait fausse.
 //
 // L'écran a une seule action : copier le lien. Tout le reste est de la lecture.
 // D'où la hiérarchie : le lien en haut, plein cadre ; les chiffres ensuite ;

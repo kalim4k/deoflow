@@ -2,7 +2,14 @@
 // Pattern: D-25 mock Prisma + module-level vi.mock (Pitfall 11).
 // prismaMock import MUST come first so the vi.mock auto-hoists above route imports.
 import { prismaMock } from '@/test-utils/prisma-mock';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+// La branche « vérification désactivée » pose les cookies de session. Sans ce
+// mock, `cookies()` lève hors contexte de requête et la route échoue avant ses
+// assertions — l'ancienne suite ne l'avait jamais rencontré, ne testant que le
+// parcours en deux étapes, qui n'ouvre aucune session.
+import { mockNextCookies, __cookieStore } from '@/test-utils/mock-cookies';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+mockNextCookies();
 import fs from 'node:fs';
 import path from 'node:path';
 import { NextRequest } from 'next/server';
@@ -41,6 +48,7 @@ function makeReq(body: unknown): NextRequest {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  __cookieStore.clear();
   // Default $transaction passes the prismaMock as `tx` so writes within the
   // callback hit the same mocks as the outer client (mockDeep proxies them).
   prismaMock.$transaction.mockImplementation((cb: unknown) => {
@@ -51,7 +59,25 @@ beforeEach(() => {
   });
 });
 
-describe('POST /api/auth/signup', () => {
+/**
+ * Ces tests décrivent le parcours EN DEUX ÉTAPES (code par email), qui n'est
+ * plus le défaut de Deoflow depuis le 2026-08-14 — la vérification est
+ * désactivée sauf `AUTH_REQUIRE_EMAIL_VERIFICATION="1"`.
+ *
+ * Le drapeau est donc posé explicitement ici. Il l'était implicitement avant :
+ * les tests héritaient du défaut ambiant, et le jour où ce défaut a changé, ils
+ * se sont mis à décrire un parcours que l'application ne suivait plus. Un test
+ * qui n'énonce pas la configuration qu'il suppose finit par tester autre chose
+ * que ce que son nom annonce.
+ */
+describe('POST /api/auth/signup — vérification email exigée', () => {
+  beforeEach(() => {
+    process.env.AUTH_REQUIRE_EMAIL_VERIFICATION = '1';
+  });
+  afterEach(() => {
+    delete process.env.AUTH_REQUIRE_EMAIL_VERIFICATION;
+  });
+
   it('creates a new user, code, and outbox event for genuinely new emails', async () => {
     prismaMock.user.findUnique.mockResolvedValue(null);
     prismaMock.user.create.mockResolvedValue({ id: 'u-new' } as never);
@@ -157,5 +183,58 @@ describe('POST /api/auth/signup', () => {
   it("source exports runtime = 'nodejs' (Phase 0 guard)", () => {
     const src = fs.readFileSync(path.join(__dirname, 'route.ts'), 'utf8');
     expect(src).toMatch(/export\s+const\s+runtime\s*=\s*['"]nodejs['"]/);
+  });
+});
+
+/**
+ * Le parcours par DÉFAUT de Deoflow : vérification désactivée.
+ *
+ * Il n'était couvert nulle part — le drapeau valait `"0"` dans `.env` mais
+ * vitest ne lit pas ce fichier, si bien que la suite ne testait que le
+ * parcours en deux étapes. Autrement dit : le chemin réellement emprunté par
+ * chaque inscription en production n'avait aucun test.
+ */
+describe('POST /api/auth/signup — vérification désactivée (défaut)', () => {
+  it('ouvre la session immédiatement, sans code ni email', async () => {
+    expect(process.env.AUTH_REQUIRE_EMAIL_VERIFICATION).toBeUndefined();
+
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    // `tokenVersion` est indispensable : la route le fait entrer dans le jeton
+    // signé, et la révocation de session repose dessus.
+    prismaMock.user.create.mockResolvedValue({
+      id: 'u-new',
+      email: 'new@example.com',
+      tokenVersion: 0,
+    } as never);
+
+    const res = await POST(makeReq({ email: 'new@example.com', password: 'a-strong-passphrase' }));
+
+    expect(res.status).toBe(201);
+    expect((await res.json()).session).toBe(true);
+
+    // La session est bien ouverte sur-le-champ : c'est ce que « désactivé »
+    // veut dire côté utilisateur.
+    expect(__cookieStore.has('app-token')).toBe(true);
+    expect(__cookieStore.has('app-refresh')).toBe(true);
+    expect(__cookieStore.has('app-csrf')).toBe(true);
+
+    // Ni code à saisir, ni email à envoyer : c'est tout l'objet du réglage.
+    expect(prismaMock.verificationCode.create).not.toHaveBeenCalled();
+    expect(enqueueOutbox).not.toHaveBeenCalled();
+  });
+
+  it('signale un email déjà pris au lieu d’ouvrir une session', async () => {
+    // ⚠️ C'est ici que se perd la résistance à l'énumération : la réponse
+    // diffère selon que l'adresse existe ou non, donc on peut la tester. Coût
+    // assumé de la désactivation, documenté dans email-verification.ts.
+    prismaMock.user.findUnique.mockResolvedValue({ id: 'u-existing' } as never);
+
+    const res = await POST(
+      makeReq({ email: 'existing@example.com', password: 'a-strong-passphrase' }),
+    );
+
+    expect(res.status).toBe(201);
+    expect((await res.json()).session).toBe(false);
+    expect(prismaMock.user.create).not.toHaveBeenCalled();
   });
 });

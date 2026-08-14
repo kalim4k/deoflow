@@ -136,6 +136,39 @@ describe('POST /api/auth/login', () => {
   });
 
   it('Test 6: EMAIL_NOT_VERIFIED — credentials valid but emailVerifiedAt is null', async () => {
+    // Le drapeau est posé explicitement : depuis le 2026-08-14, Deoflow
+    // n'exige plus la vérification par défaut, et sans cette ligne ce test
+    // décrirait une porte qui ne se ferme plus. Le comportement testé reste
+    // celui qui s'applique dès qu'on rétablit la vérification.
+    process.env.AUTH_REQUIRE_EMAIL_VERIFICATION = '1';
+    try {
+      prismaMock.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        email: 'a@b.com',
+        passwordHash: '$2a$12$hashhashhashhashhashhashhashhashhashhashhashhashhashhha',
+        emailVerifiedAt: null,
+        tokenVersion: 0,
+      } as never);
+      vi.mocked(verifyPassword).mockResolvedValue(true);
+
+      const res = await POST(makeReq({ email: 'a@b.com', password: 'longenough' }));
+
+      expect(res.status).toBe(403);
+      expect((await res.json()).error).toBe('EMAIL_NOT_VERIFIED');
+      expect(recordSuccess).not.toHaveBeenCalled();
+      expect(__cookieStore.has('app-token')).toBe(false);
+    } finally {
+      delete process.env.AUTH_REQUIRE_EMAIL_VERIFICATION;
+    }
+  });
+
+  it('Test 6 bis : email non vérifié accepté quand la vérification est désactivée', async () => {
+    // Le défaut de Deoflow depuis le 2026-08-14. Sans ce test, la
+    // désactivation ne serait couverte nulle part : une régression rétablirait
+    // la porte en silence, et plus personne ne pourrait se connecter — aucun
+    // email de vérification ne partant en production faute de Resend.
+    expect(process.env.AUTH_REQUIRE_EMAIL_VERIFICATION).toBeUndefined();
+
     prismaMock.user.findUnique.mockResolvedValue({
       id: 'u1',
       email: 'a@b.com',
@@ -147,10 +180,8 @@ describe('POST /api/auth/login', () => {
 
     const res = await POST(makeReq({ email: 'a@b.com', password: 'longenough' }));
 
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe('EMAIL_NOT_VERIFIED');
-    expect(recordSuccess).not.toHaveBeenCalled();
-    expect(__cookieStore.has('app-token')).toBe(false);
+    expect(res.status).toBe(200);
+    expect(__cookieStore.has('app-token')).toBe(true);
   });
 
   it('Test 7: per-email rate limit — 11th attempt returns 429 TOO_MANY_LOGIN_ATTEMPTS', async () => {

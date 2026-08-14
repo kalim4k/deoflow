@@ -13,22 +13,30 @@ import {
 } from './referrals';
 
 describe('barème', () => {
-  it('vaut 25 %', () => {
-    expect(COMMISSION_RATE_BPS).toBe(2_500);
-    expect(ratePercent()).toBe(25);
+  it('vaut 30 %', () => {
+    expect(COMMISSION_RATE_BPS).toBe(3_000);
+    expect(ratePercent()).toBe(30);
   });
 
   it('calcule la commission sur les paliers réels du catalogue', () => {
-    expect(commissionFor(3_000)).toBe(750); // Pack Starter
-    expect(commissionFor(9_000)).toBe(2_250); // Pack Créateur
-    expect(commissionFor(30_000)).toBe(7_500); // Pack Pro
+    expect(commissionFor(3_000)).toBe(900); // Pack Starter
+    expect(commissionFor(9_000)).toBe(2_700); // Pack Créateur
+    expect(commissionFor(30_000)).toBe(9_000); // Pack Pro
+  });
+
+  it('réaffiche une ancienne commission à son taux d’époque', () => {
+    // Le taux est stocké sur chaque ligne : une commission acquise à 25 % doit
+    // pouvoir être recalculée telle quelle après le passage à 30 %. Sans ce
+    // paramètre, l'historique se réécrirait à chaque changement de barème.
+    expect(commissionFor(3_000, 2_500)).toBe(750);
+    expect(commissionFor(30_000, 2_500)).toBe(7_500);
   });
 
   it('arrondit vers le bas, jamais vers le haut', () => {
-    // 3 FCFA × 25 % = 0,75. Arrondir au supérieur créerait un franc à partir
+    // 3 FCFA × 30 % = 0,9. Arrondir au supérieur créerait un franc à partir
     // de rien, à chaque achat, et le registre cesserait de boucler.
     expect(commissionFor(3)).toBe(0);
-    expect(commissionFor(7)).toBe(1);
+    expect(commissionFor(4)).toBe(1);
   });
 
   it('ne produit jamais de commission négative ou absurde', () => {

@@ -1,12 +1,15 @@
 'use client';
 
-// Deux parcours, selon la configuration du serveur :
+// Deux parcours, selon la configuration du serveur. L'écran ne choisit pas :
+// il lit la réponse, ce qui lui permet de suivre un changement de
+// configuration sans être reconstruit.
 //
-//   - AUTH_REQUIRE_EMAIL_VERIFICATION="0" (actuel) : l'inscription ouvre la
+//   - Vérification désactivée (le défaut sur Deoflow) : l'inscription ouvre la
 //     session immédiatement. La réponse porte `session: true` et on file au
 //     tableau de bord. Si elle porte `session: false`, l'email a déjà un
 //     compte — on oriente vers la connexion.
-//   - Sinon : inscription → /verify-email (code de 8 caractères) → cookies.
+//   - AUTH_REQUIRE_EMAIL_VERIFICATION="1" : inscription → /verify-email
+//     (code de 8 caractères) → cookies.
 //     L'endpoint étant résistant à l'énumération, la réponse est alors
 //     identique que l'email soit libre ou pris, et on redirige toujours vers
 //     la saisie du code sans jamais confirmer l'existence d'un compte.

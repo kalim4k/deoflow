@@ -6,8 +6,19 @@
  * au parrain qui deviendrait fausse.
  */
 
-/** Taux de commission, en points de base. 2500 = 25 %. */
-export const COMMISSION_RATE_BPS = 2_500;
+/**
+ * Taux de commission, en points de base. 3000 = 30 %.
+ *
+ * Porté de 25 % à 30 % le 2026-08-14, sur décision du propriétaire.
+ *
+ * Le changement ne vaut QUE pour l'avenir : `referrals/service.ts` fige le
+ * montant ET le taux sur chaque ligne `ReferralCommission` au moment de
+ * l'achat, et `referrals/balance.ts` additionne la colonne stockée. Les
+ * commissions déjà acquises gardent donc leurs 25 %. C'est le comportement
+ * voulu — recalculer rétroactivement changerait ce qu'on doit à des créateurs
+ * pour des ventes déjà conclues, dans un sens comme dans l'autre.
+ */
+export const COMMISSION_RATE_BPS = 3_000;
 
 /** Paramètre d'URL du lien de parrainage. */
 export const REFERRAL_PARAM = 'ref';
@@ -38,7 +49,13 @@ export const REFERRAL_CODE_LENGTH = 8;
  */
 export const REFERRAL_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-/** Commission due sur un achat, arrondie à l'entier inférieur. */
+/**
+ * Commission due sur un achat, arrondie à l'entier inférieur.
+ *
+ * `rateBps` reste un paramètre : c'est ce qui permet de réafficher une
+ * commission ancienne avec le taux qui s'appliquait ce jour-là, plutôt qu'avec
+ * le taux courant.
+ */
 export function commissionFor(amountFcfa: number, rateBps = COMMISSION_RATE_BPS): number {
   if (!Number.isFinite(amountFcfa) || amountFcfa <= 0) return 0;
   // `floor` et non `round` : l'arrondi se fait en faveur de la maison, une
