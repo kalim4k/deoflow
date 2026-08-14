@@ -48,6 +48,22 @@ export default tseslint.config(
     },
   },
   {
+    // Service worker : `self`, `caches`, `clients` et `skipWaiting` n'existent
+    // ni dans Node ni dans une page. Sans ces globales, ESLint signale onze
+    // `no-undef` sur du code parfaitement valide.
+    //
+    // Ce fichier échappe à `pnpm lint` (qui ne parcourt que `src/`) et n'est
+    // vu que par le hook de pré-commit — d'où l'intérêt de le configurer
+    // correctement plutôt que de parsemer le worker de commentaires
+    // `eslint-disable`.
+    files: ['frontend/public/sw.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
+  },
+  {
     files: ['**/*.config.{js,mjs,ts}', '**/*.cjs'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',

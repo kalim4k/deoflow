@@ -133,6 +133,7 @@ If a change is genuinely required in any of these, surface a brief "I am about t
 - OAuth callback MUST refuse `email_verified !== true` from Google — otherwise an attacker with an unverified Google account matching a victim's email can take over the account via auto-linking.
 - Cron handlers MUST verify `Authorization: Bearer ${CRON_SECRET}` to prevent unauthenticated invocation of background work.
 - Cookies stay `httpOnly` + `Secure` (prod) + `SameSite=Lax`.
+- **The service worker ([frontend/public/sw.js](frontend/public/sw.js)) must NEVER cache `/api/**` or authenticated HTML.** A service worker cache is keyed by *origin*, not by user: a cached credit balance or withdrawal list would be served to whoever holds the phone next. It caches only `/_next/static/**` (content-hashed) and `/icons/**`, and navigations are network-first with the static `/offline` page as the only fallback. [pwa.test.ts](frontend/src/lib/deoflow/pwa.test.ts) fails if that changes. The `/offline` page must stay free of session data for the same reason.
 - Sentry init stays in [frontend/instrumentation.ts](frontend/instrumentation.ts) `register()` — do not move it into a route module (the hook fires before app code, route imports do not).
 
 ## Design system — fully swappable

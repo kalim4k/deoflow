@@ -181,6 +181,25 @@ Le smoke script demande `DATABASE_URL` et `JWT_SECRET` set (il lit le code de v�
 5. Le standalone output est auto-détecté (`next.config.ts` l'active) ; aucune config supplémentaire.
 6. Détails init Sentry / OTel dans [`frontend/instrumentation.ts`](frontend/instrumentation.ts) et les fichiers `sentry.*.config.ts` — lis-les pour les détails d'ordre des hooks.
 
+## Application installable (PWA)
+
+Deoflow s'installe sur l'écran d'accueil, sous le nom **Deoflow**.
+
+| Pièce | Fichier | Rôle |
+|---|---|---|
+| Manifeste | [`src/app/manifest.ts`](frontend/src/app/manifest.ts) | Convention Next : servi à `/manifest.webmanifest`, le `<link>` est injecté automatiquement |
+| Service worker | [`public/sw.js`](frontend/public/sw.js) | Condition d'installabilité Chrome + page hors ligne |
+| Enregistrement | [`ServiceWorkerRegistrar.tsx`](frontend/src/components/pwa/ServiceWorkerRegistrar.tsx) | Production uniquement — en dev il entre en conflit avec Turbopack |
+| Invite d'installation | [`InstallPrompt.tsx`](frontend/src/components/pwa/InstallPrompt.tsx) | `beforeinstallprompt` sur Android, marche à suivre sur iOS |
+| Page hors ligne | [`src/app/offline/page.tsx`](frontend/src/app/offline/page.tsx) | Statique par obligation : elle est mise en cache |
+| Icônes | `public/icons/` | 192, 512, et **512 maskable** |
+
+**Ce que le service worker met en cache** : `/_next/static/**` et `/icons/**`, rien d'autre. Jamais `/api/**`, jamais le HTML d'une page connectée. Le cache d'un service worker est partagé par *origine*, pas par utilisateur : sur un téléphone prêté, une réponse mise en cache pour un compte serait servie au suivant. [`pwa.test.ts`](frontend/src/lib/deoflow/pwa.test.ts) échoue si cette règle saute.
+
+**Les bords arrondis** viennent de l'icône `maskable`, pas du fichier PNG : le lanceur Android taille lui-même la forme dans l'image fournie. Sans icône maskable déclarée, Android pose l'icône dans un carré blanc avec une marge.
+
+Régénérer les icônes après un changement de source : `pnpm --filter frontend run icons`. Le script [`generate-icons.mjs`](frontend/scripts/generate-icons.mjs) détoure les coins et produit les six fichiers d'un coup — les régénérer un par un fait diverger l'icône de l'onglet et celle de l'écran d'accueil.
+
 ## Design system — entièrement swappable
 
 Le starter ne ship **aucun composant UI** par design. Ce que tu as :

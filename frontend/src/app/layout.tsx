@@ -6,6 +6,8 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { CreditsProvider } from '@/contexts/CreditsContext';
 import { NotificationsProvider } from '@/contexts/NotificationsContext';
 import { NavProgressProvider } from '@/components/NavProgress';
+import { ServiceWorkerRegistrar } from '@/components/pwa/ServiceWorkerRegistrar';
+import { InstallPrompt } from '@/components/pwa/InstallPrompt';
 
 // Une seule police chargée, sous-ensemble latin : la cible est sur navigateur
 // mobile en 4G instable. Le corps de texte utilise la police système (0 octet)
@@ -36,6 +38,22 @@ export const metadata: Metadata = {
   },
   description:
     'Les meilleurs modèles de génération d’images et de vidéos IA, dans une seule interface, payables en Mobile Money. Sans carte bancaire.',
+
+  // Le nom affiché sous l'icône une fois installée.
+  applicationName: 'Deoflow',
+
+  // Équivalent des `apple-mobile-web-app-*`. iOS ignore le manifeste : sans
+  // ces clés, l'icône ajoutée à l'écran d'accueil rouvre Safari au lieu de
+  // lancer l'application en plein écran.
+  //
+  // `statusBarStyle` reste `default` et non `black-translucent` : ce dernier
+  // fait passer la page SOUS la barre d'état, ce qui exige de gérer les zones
+  // sûres partout. Sans ça, l'heure se superpose aux en-têtes.
+  appleWebApp: {
+    capable: true,
+    title: 'Deoflow',
+    statusBarStyle: 'default',
+  },
 };
 
 export const viewport: Viewport = {
@@ -64,6 +82,10 @@ export default function RootLayout({
                   sait pas qui regarde. */}
               <NotificationsProvider>
                 <NavProgressProvider>{children}</NavProgressProvider>
+                {/* Hors de NavProgressProvider : l'invite d'installation ne
+                    doit pas disparaître à chaque changement de page. */}
+                <ServiceWorkerRegistrar />
+                <InstallPrompt />
               </NotificationsProvider>
             </CreditsProvider>
           </AuthProvider>

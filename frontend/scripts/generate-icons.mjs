@@ -52,16 +52,23 @@ function roundedMask(size) {
   );
 }
 
+/** La source détourée à la taille voulue, coins devenus transparents. */
+async function maskedPng(size) {
+  return (
+    sharp(SRC)
+      .resize(size, size, { fit: 'cover' })
+      .ensureAlpha()
+      // `dest-in` ne garde la source que là où le masque est opaque.
+      .composite([{ input: roundedMask(size), blend: 'dest-in' }])
+      .png()
+      .toBuffer()
+  );
+}
+
 async function emit(size, out, { opaque = false } = {}) {
   const path = resolve(REPO, 'frontend', out);
 
-  const masked = await sharp(SRC)
-    .resize(size, size, { fit: 'cover' })
-    .ensureAlpha()
-    // `dest-in` ne garde la source que là où le masque est opaque.
-    .composite([{ input: roundedMask(size), blend: 'dest-in' }])
-    .png()
-    .toBuffer();
+  const masked = await maskedPng(size);
 
   // Deuxième passe obligatoire pour l'aplatissement : sharp exécute `flatten`
   // AVANT `composite` dans son pipeline interne, quel que soit l'ordre des
@@ -86,5 +93,37 @@ await emit(180, 'src/app/apple-icon.png', { opaque: true });
 // dimensions et lui donne une empreinte de contenu). Séparée des deux fichiers
 // ci-dessus : ce sont des conventions de routage, pas des ressources à importer.
 await emit(192, 'src/components/brand/deoflow-icon.png');
+
+// Icônes du manifeste PWA. Chemins publics figés : `src/app/manifest.ts` les
+// référence en dur, et un manifeste qui pointe vers une icône absente rend
+// l'application non installable — sans message d'erreur ailleurs que dans
+// l'onglet « Application » des outils de développement.
+await emit(192, 'public/icons/icon-192.png');
+await emit(512, 'public/icons/icon-512.png');
+
+/**
+ * Icône « maskable » Android.
+ *
+ * Le lanceur découpe lui-même la forme — cercle chez Google, carré arrondi
+ * chez Samsung, goutte ailleurs — et il la découpe DANS l'image fournie. Une
+ * icône non déclarée maskable subit le sort inverse : Android la pose dans un
+ * carré blanc avec une marge, ce qui se voit encore davantage. C'est ce fichier
+ * qui donne les bords arrondis une fois l'application installée.
+ *
+ * La spécification garantit un seul endroit : la « zone de sécurité », cercle
+ * de 80 % du côté (donc rayon 40 %). Mesure faite sur la source, le pictogramme
+ * s'étend jusqu'à 39,3 % du centre — il tient, et on peut donc rester en pleine
+ * page. Une variante réduite à 80 % aurait été plus confortable mais laissait
+ * voir le contour de la carte sur le fond de remplissage : le dessin porte un
+ * léger dégradé, qu'aucune couleur unie n'égale partout.
+ *
+ * Les coins sont remplis (`opaque`) et non transparents : ce que le lanceur
+ * découpe doit être de la matière, pas du vide.
+ *
+ * ⚠️ Si l'icône source change, refaire la mesure. Un pictogramme qui dépasserait
+ * 40 % se ferait rogner par les lanceurs circulaires — et seulement par
+ * ceux-là, donc invisible sur l'appareil de test le plus probable.
+ */
+await emit(512, 'public/icons/maskable-512.png', { opaque: true });
 
 console.log('\nterminé.');
