@@ -15,7 +15,7 @@ const log = createLogger();
 const BATCH_SIZE = 100; // D-08
 const LEASE_TTL_MS = 120_000; // ~2 × maxDuration (Pitfall 3)
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function handle(req: NextRequest): Promise<NextResponse> {
   const fail = verifyCronSecret(req);
   if (fail) return fail;
 
@@ -52,3 +52,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     );
   });
 }
+
+/**
+ * Vercel Cron déclenche ses tâches en **GET**, pas en POST.
+ *
+ * Ce gestionnaire n'exposait que POST : en production, la tâche répondait 405
+ * et ne tournait jamais. L'échec est muet — aucune erreur applicative, aucune
+ * ligne de log, juste du travail de fond qui n'a pas lieu. On ne s'en aperçoit
+ * qu'en constatant l'effet : des e-mails qui n'arrivent pas, des commandes qui
+ * n'expirent pas.
+ *
+ * POST reste exposé pour les déclenchements manuels et les tests.
+ * Accepter GET n'ouvre rien : `verifyCronSecret` garde l'entrée dans les deux
+ * cas, et l'opération est idempotente.
+ */
+export const GET = handle;
+export const POST = handle;
