@@ -24,18 +24,106 @@ import type { PrismaClient } from '@prisma/client';
 import { CREDIT_FCFA, MARGIN } from '@/lib/deoflow/pricing';
 
 export const STATS_PERIODS = ['7d', '30d', 'all'] as const;
-export type StatsPeriod = (typeof STATS_PERIODS)[number];
+export type StatsPreset = (typeof STATS_PERIODS)[number];
+/** `custom` n'est pas un préréglage : il naît d'un couple de dates. */
+export type StatsPeriod = StatsPreset | 'custom';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export function parsePeriod(raw: string | null): StatsPeriod {
-  return (STATS_PERIODS as readonly string[]).includes(raw ?? '') ? (raw as StatsPeriod) : '30d';
+export function parsePeriod(raw: string | null): StatsPreset {
+  return (STATS_PERIODS as readonly string[]).includes(raw ?? '') ? (raw as StatsPreset) : '30d';
 }
 
 /** Début de la fenêtre, ou `null` pour « depuis toujours ». */
-export function periodStart(period: StatsPeriod, now: Date = new Date()): Date | null {
+export function periodStart(period: StatsPreset, now: Date = new Date()): Date | null {
   if (period === 'all') return null;
   return new Date(now.getTime() - (period === '7d' ? 7 : 30) * DAY_MS);
+}
+
+/**
+ * Fenêtre résolue. `null` d'un côté = borne ouverte.
+ *
+ * Les préréglages produisent `until: null` (jusqu'à maintenant) ; seule une
+ * plage personnalisée peut fermer la borne haute.
+ */
+export interface StatsRange {
+  period: StatsPeriod;
+  since: Date | null;
+  until: Date | null;
+}
+
+/** Plage explicite refusée — la route répond 400 plutôt que d'inventer une fenêtre. */
+export class StatsRangeError extends Error {
+  readonly code = 'STATS_RANGE_INVALID';
+  constructor(message: string) {
+    super(message);
+    this.name = 'StatsRangeError';
+  }
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * `YYYY-MM-DD` → instant UTC.
+ *
+ * Les bornes sont posées sur la journée ENTIÈRE : `from` à 00:00:00.000 et
+ * `to` à 23:59:59.999. Un administrateur qui choisit « au 14 août » veut
+ * évidemment inclure le 14 août ; borner à minuit amputerait la dernière
+ * journée de la fenêtre, et l'erreur passerait inaperçue — un jour de chiffre
+ * d'affaires en moins ressemble à un jour creux.
+ *
+ * UTC et non l'heure locale du serveur : le Togo est à UTC+0, donc la journée
+ * calendaire de l'exploitant coïncide exactement. Depuis un autre fuseau, les
+ * bornes se décaleraient de l'écart correspondant.
+ */
+function dayBound(iso: string, edge: 'start' | 'end'): Date | null {
+  if (!DATE_RE.test(iso)) return null;
+  const d = new Date(`${iso}T${edge === 'start' ? '00:00:00.000' : '23:59:59.999'}Z`);
+  if (Number.isNaN(d.getTime())) return null;
+
+  // Vérification aller-retour, indispensable : JavaScript ne rejette pas les
+  // jours hors calendrier, il les fait DÉBORDER. `2026-02-31` devient le
+  // 3 mars, `2026-04-31` le 1er mai. Sans ce contrôle, une date inexistante
+  // produirait une fenêtre décalée de quelques jours — silencieusement, et sur
+  // des chiffres d'argent.
+  if (d.toISOString().slice(0, 10) !== iso) return null;
+
+  return d;
+}
+
+/**
+ * Résout la fenêtre demandée.
+ *
+ * Deux traitements volontairement différents :
+ *
+ *   - un `period` inconnu retombe sur 30 jours. C'est un nom de préréglage mal
+ *     orthographié : un paramètre d'affichage ne doit pas casser un écran.
+ *   - une date explicite invalide LÈVE. L'administrateur a désigné une fenêtre
+ *     précise ; lui en servir une autre en silence, sur des chiffres d'argent,
+ *     est pire qu'une erreur affichée.
+ */
+export function resolveStatsRange(
+  params: { period?: string | null; from?: string | null; to?: string | null },
+  now: Date = new Date(),
+): StatsRange {
+  const rawFrom = params.from?.trim() || null;
+  const rawTo = params.to?.trim() || null;
+
+  if (rawFrom || rawTo) {
+    const since = rawFrom ? dayBound(rawFrom, 'start') : null;
+    const until = rawTo ? dayBound(rawTo, 'end') : null;
+
+    if (rawFrom && !since) throw new StatsRangeError(`Date de début invalide : ${rawFrom}`);
+    if (rawTo && !until) throw new StatsRangeError(`Date de fin invalide : ${rawTo}`);
+    if (since && until && since > until) {
+      throw new StatsRangeError('La date de début est postérieure à la date de fin.');
+    }
+
+    return { period: 'custom', since, until };
+  }
+
+  const preset = parsePeriod(params.period ?? null);
+  return { period: preset, since: periodStart(preset, now), until: null };
 }
 
 /**
@@ -54,6 +142,8 @@ export interface AdminStats {
   period: StatsPeriod;
   /** Début de fenêtre en ISO, `null` si « depuis toujours ». */
   since: string | null;
+  /** Fin de fenêtre en ISO, `null` si « jusqu'à maintenant ». */
+  until: string | null;
   revenue: {
     grossFcfa: number;
     orders: number;
@@ -116,11 +206,18 @@ function sum(value: number | null | undefined): number {
 
 export async function computeAdminStats(
   prisma: StatsClient,
-  period: StatsPeriod,
+  input: StatsPeriod | StatsRange,
   now: Date = new Date(),
 ): Promise<AdminStats> {
-  const since = periodStart(period, now);
-  const inPeriod = since ? { gte: since } : undefined;
+  // Un préréglage passé directement reste accepté : c'est la forme qu'utilisent
+  // les tests et la plupart des appels. Une plage résolue passe telle quelle.
+  const range = typeof input === 'string' ? resolveStatsRange({ period: input }, now) : input;
+  const { period, since, until } = range;
+
+  const inPeriod =
+    since || until
+      ? { ...(since ? { gte: since } : {}), ...(until ? { lte: until } : {}) }
+      : undefined;
 
   const [
     orders,
@@ -198,6 +295,7 @@ export async function computeAdminStats(
   return {
     period,
     since: since?.toISOString() ?? null,
+    until: until?.toISOString() ?? null,
     revenue: {
       grossFcfa,
       orders: orders._count,

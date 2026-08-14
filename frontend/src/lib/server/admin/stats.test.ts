@@ -4,6 +4,8 @@ import {
   parsePeriod,
   periodStart,
   providerCostFcfa,
+  resolveStatsRange,
+  StatsRangeError,
   type AdminStats,
 } from './stats';
 
@@ -88,6 +90,79 @@ describe('fenêtre de calcul', () => {
     const now = new Date('2026-08-13T12:00:00Z');
     expect(periodStart('7d', now)?.toISOString()).toBe('2026-08-06T12:00:00.000Z');
     expect(periodStart('30d', now)?.toISOString()).toBe('2026-07-14T12:00:00.000Z');
+  });
+});
+
+describe('période personnalisée', () => {
+  const now = new Date('2026-08-13T12:00:00Z');
+
+  it('borne la journée entière, de 00:00 à 23:59:59.999', () => {
+    // LE test de cette série. Borner `to` à minuit amputerait la dernière
+    // journée de la fenêtre : un jour de chiffre d'affaires disparaîtrait en
+    // ressemblant à un jour creux, sans que rien ne le signale.
+    const r = resolveStatsRange({ from: '2026-08-01', to: '2026-08-10' }, now);
+    expect(r.period).toBe('custom');
+    expect(r.since?.toISOString()).toBe('2026-08-01T00:00:00.000Z');
+    expect(r.until?.toISOString()).toBe('2026-08-10T23:59:59.999Z');
+  });
+
+  it('accepte une borne seule, de chaque côté', () => {
+    expect(resolveStatsRange({ from: '2026-08-01' }, now).until).toBeNull();
+    expect(resolveStatsRange({ to: '2026-08-10' }, now).since).toBeNull();
+  });
+
+  it('les dates l’emportent sur un préréglage passé en même temps', () => {
+    const r = resolveStatsRange({ period: '7d', from: '2026-01-01' }, now);
+    expect(r.period).toBe('custom');
+    expect(r.since?.toISOString()).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('refuse une date mal formée plutôt que d’inventer une fenêtre', () => {
+    // Contraste volontaire avec `parsePeriod` : un préréglage inconnu retombe
+    // sur 30 jours, mais une date explicite invalide lève. L'administrateur a
+    // désigné une fenêtre précise ; lui en servir une autre en silence, sur des
+    // chiffres d'argent, est pire qu'une erreur affichée.
+    expect(() => resolveStatsRange({ from: '01/08/2026' }, now)).toThrow(StatsRangeError);
+    expect(() => resolveStatsRange({ from: '2026-13-01' }, now)).toThrow(StatsRangeError);
+    expect(() => resolveStatsRange({ to: '2026-02-31' }, now)).toThrow(StatsRangeError);
+  });
+
+  it('refuse une fenêtre à l’envers', () => {
+    expect(() => resolveStatsRange({ from: '2026-08-10', to: '2026-08-01' }, now)).toThrow(
+      StatsRangeError,
+    );
+  });
+
+  it('une chaîne vide ne compte pas comme une borne', () => {
+    // Le formulaire renvoie '' quand l'utilisateur efface un champ. Traiter ça
+    // comme une date déclencherait une erreur au lieu d'élargir la fenêtre.
+    const r = resolveStatsRange({ period: '7d', from: '', to: '  ' }, now);
+    expect(r.period).toBe('7d');
+    expect(r.since?.toISOString()).toBe('2026-08-06T12:00:00.000Z');
+  });
+
+  it('filtre les deux bornes dans les requêtes', async () => {
+    const { client, calls } = fakePrisma();
+    await computeAdminStats(
+      client,
+      resolveStatsRange({ from: '2026-08-01', to: '2026-08-10' }, now),
+    );
+    const { where } = calls['order.aggregate']![0] as {
+      where: { paidAt: { gte: Date; lte: Date } };
+    };
+    expect(where.paidAt.gte.toISOString()).toBe('2026-08-01T00:00:00.000Z');
+    expect(where.paidAt.lte.toISOString()).toBe('2026-08-10T23:59:59.999Z');
+  });
+
+  it('expose les deux bornes dans la réponse', async () => {
+    const stats = await computeAdminStats(
+      fakePrisma().client,
+      resolveStatsRange({ from: '2026-08-01', to: '2026-08-10' }, now),
+    );
+    expect(stats.since).toBe('2026-08-01T00:00:00.000Z');
+    expect(stats.until).toBe('2026-08-10T23:59:59.999Z');
+    // L'encours reste hors période : c'est une dette à l'instant T, pas un flux.
+    expect(stats.credits.outstanding).toBeGreaterThanOrEqual(0);
   });
 });
 

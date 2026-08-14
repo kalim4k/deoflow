@@ -9,27 +9,16 @@ import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 import { buttonStyles } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Feedback';
-import { ArrowRightIcon, CheckIcon, ImageIcon, StarIcon, VideoIcon } from '@/components/icons';
+import { ArrowRightIcon, CheckIcon, ImageIcon, VideoIcon } from '@/components/icons';
 import { AI_MODELS, MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
 import { startingPrice } from '@/lib/deoflow/pricing';
 import { minBillableSeconds } from '@/lib/deoflow/capabilities';
 import { CREDIT_PACKS, pricePerCredit } from '@/lib/deoflow/packs';
-import { modelSamples } from '@/lib/deoflow/placeholder';
 import { ModelBanner } from '@/components/app/ModelBanner';
 import type { AiModel } from '@/lib/deoflow/types';
 import { formatAmount } from '@/lib/format';
 
 export const runtime = 'nodejs';
-
-// ⚠️ CHIFFRES DE DÉMONSTRATION — à remplacer avant toute mise en ligne.
-// Deoflow n'a pas encore d'utilisateurs : afficher une audience ou une note
-// inventées relève de la publicité trompeuse, et c'est le genre de détail qui
-// se retourne contre une marque naissante. Le jour où ces nombres existent
-// vraiment, ils doivent venir d'une route d'agrégation, pas d'une constante.
-const SOCIAL_PROOF = {
-  users: '500+',
-  rating: '4,8',
-};
 
 // Formats natifs de sortie. Ce n'est pas un mur de logos « ils nous font
 // confiance » — ce serait faux — mais une information vérifiable : le ratio
@@ -106,41 +95,21 @@ export default function Home() {
             </span>
           </div>
 
-          {/* Preuve sociale — voir l'avertissement sur SOCIAL_PROOF. */}
-          <div
-            className="rise-in flex flex-wrap items-center justify-center gap-x-4 gap-y-2"
-            style={{ animationDelay: '280ms' }}
-          >
-            <p className="flex flex-wrap items-center justify-center gap-x-2 text-sm text-ink-500">
-              <span className="flex text-ember-500">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <StarIcon key={i} className="size-4" />
-                ))}
-              </span>
-              <span>
-                <strong className="font-medium text-ink-900">{SOCIAL_PROOF.rating}/5</strong> —{' '}
-                {SOCIAL_PROOF.users} créateurs déjà inscrits
-              </span>
-            </p>
-          </div>
+          {/* Ici se trouvaient « 4,8/5 » et « 500+ créateurs déjà inscrits »,
+              cinq étoiles à l'appui. Ces nombres étaient inventés : Deoflow
+              n'avait aucun utilisateur. Une note et une audience fictives sur
+              une page de vente, c'est de la publicité trompeuse — retirées
+              avant la mise en production. Elles pourront revenir le jour où
+              elles seront vraies, et elles viendront alors d'une route
+              d'agrégation, jamais d'une constante. */}
         </div>
 
-        {/* Aperçus : des rendus, pas une illustration décorative. */}
-        <ul className="mt-12 grid grid-cols-3 gap-3 sm:mt-14 sm:gap-4" aria-hidden="true">
-          {modelSamples('hero-deoflow', 'image', 3).map((src, i) => (
-            <li key={src} className="rise-in" style={{ animationDelay: `${360 + i * 90}ms` }}>
-              <img
-                src={src}
-                alt=""
-                className={
-                  i === 1
-                    ? 'aspect-[3/4] w-full rounded-2xl border border-line object-cover shadow-[0_8px_28px_rgba(11,11,12,0.08)] sm:-translate-y-5'
-                    : 'aspect-[3/4] w-full rounded-2xl border border-line object-cover'
-                }
-              />
-            </li>
-          ))}
-        </ul>
+        {/* Il y avait ici trois « aperçus » en grille. C'étaient des SVG
+            dessinés localement, portant la mention « aperçu simulé » incrustée
+            dans l'image, présentés comme « des rendus, pas une illustration
+            décorative ». Retirés : la section « Les modèles disponibles » plus
+            bas montre les VRAIS visuels des six modèles, ce qui rendait cette
+            grille redondante autant que fausse. */}
       </section>
 
       {/* ── Formats de sortie (bandeau défilant) ──────────────────────── */}

@@ -5,15 +5,12 @@
 // Attention à ce que ces images SONT : des visuels de marque — logo du
 // fournisseur et nom du modèle sur un fond coloré. Ce ne sont pas des exemples
 // de rendu. Elles servent donc à reconnaître un modèle d'un coup d'œil dans une
-// grille, jamais à illustrer « voilà ce que ça produit ». Les aperçus de
-// résultat restent générés localement et estampillés « aperçu simulé » tant
-// qu'aucune API n'est branchée.
+// grille, jamais à illustrer « voilà ce que ça produit ».
 //
 // Format 16:9 comme les fichiers sources : imposer un ratio différent les
 // recadrerait en coupant le logo.
 
 import { illustrationSrc } from '@/lib/deoflow/catalog';
-import { previewDataUri } from '@/lib/deoflow/placeholder';
 import type { AiModel } from '@/lib/deoflow/types';
 import { cn } from '@/lib/cn';
 
@@ -28,17 +25,24 @@ export function ModelBanner({
 }) {
   const src = illustrationSrc(model, size);
 
-  // Sans visuel fourni, on retombe sur l'aperçu généré localement plutôt que
-  // sur une image cassée.
+  // Sans visuel fourni : un aplat neutre portant le nom du modèle, plutôt
+  // qu'une image cassée.
+  //
+  // Ce repli servait auparavant un SVG « aperçu simulé ». Les six modèles du
+  // catalogue ont tous leur visuel, donc la branche ne se déclenchait jamais —
+  // elle attendait simplement qu'on ajoute un septième modèle pour estampiller
+  // « simulé » sur une page de production. Un mot juste vaut mieux qu'une
+  // branche morte qui ment le jour où elle s'exécute.
   if (!src) {
     return (
-      <img
-        src={previewDataUri(`${model.slug}-sample-0`, model.kind, '16:9')}
-        alt=""
-        aria-hidden="true"
-        loading="lazy"
-        className={cn('checkerboard aspect-[16/9] w-full object-cover', className)}
-      />
+      <div
+        className={cn(
+          'flex aspect-[16/9] w-full items-center justify-center bg-sunken px-4 text-center',
+          className,
+        )}
+      >
+        <span className="font-display text-sm text-ink-500">{model.name}</span>
+      </div>
     );
   }
 

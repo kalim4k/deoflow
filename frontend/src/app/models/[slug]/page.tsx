@@ -15,7 +15,6 @@ import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icons';
 import { findModel, MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
 import { capabilitiesFor, durationLabel, minBillableSeconds } from '@/lib/deoflow/capabilities';
 import { startingPrice } from '@/lib/deoflow/pricing';
-import { modelSamples } from '@/lib/deoflow/placeholder';
 
 export default function ModelDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
@@ -23,7 +22,6 @@ export default function ModelDetailPage({ params }: { params: Promise<{ slug: st
   if (!model) notFound();
 
   const createHref = `/create/${model.kind === 'video' ? 'video' : 'image'}?model=${model.slug}`;
-  const samples = modelSamples(model.slug, model.kind, 3);
   const modes = capabilitiesFor(model.slug)?.modes ?? [];
   const duration = durationLabel(model.slug);
 
@@ -57,28 +55,15 @@ export default function ModelDetailPage({ params }: { params: Promise<{ slug: st
         </header>
 
         {/* Visuel de marque du modèle : il sert à le reconnaître, pas à
-            montrer un rendu. Les aperçus en dessous, eux, restent générés
-            localement et le disent. */}
+            montrer un rendu. */}
         <ModelBanner model={model} size="full" className="rounded-2xl border border-line" />
 
-        <div className="flex flex-col gap-2">
-          <p className="text-xs text-ink-300">
-            Aperçus simulés — la génération réelle n&apos;est pas encore branchée.
-          </p>
-          <ul className="grid grid-cols-3 gap-3">
-            {samples.map((src) => (
-              <li key={src}>
-                <img
-                  src={src}
-                  alt=""
-                  aria-hidden="true"
-                  loading="lazy"
-                  className="aspect-[3/4] w-full rounded-2xl border border-line object-cover"
-                />
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* Il y avait ici une grille de trois « aperçus » : des SVG générés
+            localement, portant la mention « aperçu simulé » incrustée dans
+            l'image. Retirés — la génération réelle tourne, et montrer de faux
+            exemples sur la fiche d'un modèle payant est une promesse qu'on ne
+            tient pas. Le jour où de vrais rendus de référence existent, ils
+            viendront d'une table, pas d'une fonction de dessin. */}
 
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr] lg:items-start">
           <div className="flex flex-col gap-4">

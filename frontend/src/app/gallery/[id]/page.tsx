@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/app/AppShell';
 import { Button, buttonStyles } from '@/components/ui/Button';
-import { Alert, Badge, Card, EmptyState } from '@/components/ui/Feedback';
+import { Badge, Card, EmptyState } from '@/components/ui/Feedback';
 import { Modal } from '@/components/ui/Modal';
 import { ArrowLeftIcon, DownloadIcon, ImageIcon, RefreshIcon, TrashIcon } from '@/components/icons';
 import { deleteGeneration, fetchGeneration, type ApiGeneration } from '@/lib/deoflow/api';
@@ -200,10 +200,6 @@ export default function GenerationDetailPage({ params }: { params: Promise<{ id:
                 </Button>
               </div>
             </Card>
-
-            <Alert tone="info">
-              Aperçu simulé : la génération réelle sera branchée avec le fournisseur d&apos;IA.
-            </Alert>
           </div>
         </div>
       </div>

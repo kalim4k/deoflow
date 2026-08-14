@@ -57,6 +57,9 @@ const MESSAGES: Record<string, string> = {
   FAILURE_REASON_REQUIRED: 'Indiquez pourquoi le versement a échoué.',
   SUPERADMIN_REQUIRED: 'Cette action est réservée à un SUPERADMIN.',
   ADJUSTMENT_INSUFFICIENT_CREDITS: 'Le solde de ce compte ne couvre pas ce débit.',
+  // Le serveur renvoie déjà un message précis (quelle date, et pourquoi) ;
+  // celui-ci ne sert que de repli si le corps de la réponse est perdu.
+  STATS_RANGE_INVALID: 'Période invalide : vérifiez les dates de début et de fin.',
 
   // Paiements
   IDEMPOTENCY_KEY_REQUIRED: 'Requête invalide (clé d’idempotence manquante).',

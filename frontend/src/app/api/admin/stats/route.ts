@@ -15,7 +15,7 @@ import { requireAdmin } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
-import { computeAdminStats, parsePeriod } from '@/lib/server/admin/stats';
+import { computeAdminStats, resolveStatsRange, StatsRangeError } from '@/lib/server/admin/stats';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
@@ -26,12 +26,32 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const limited = await enforceAdminRateLimit(auth.admin.id);
     if (limited) return limited;
 
-    // Une période inconnue retombe sur 30 jours plutôt que de renvoyer 400 :
-    // un paramètre d'affichage mal formé ne doit pas casser un tableau de bord.
-    const stats = await computeAdminStats(
-      prisma,
-      parsePeriod(req.nextUrl.searchParams.get('period')),
-    );
+    const q = req.nextUrl.searchParams;
+
+    // `from` / `to` (YYYY-MM-DD) l'emportent sur `period` et ouvrent la fenêtre
+    // personnalisée. Une période inconnue retombe sur 30 jours — un nom de
+    // préréglage mal orthographié ne doit pas casser un tableau de bord — mais
+    // une DATE explicite invalide renvoie 400 : l'administrateur a désigné une
+    // fenêtre précise, lui en servir une autre en silence fausserait des
+    // chiffres d'argent sans que rien ne le signale.
+    let range;
+    try {
+      range = resolveStatsRange({
+        period: q.get('period'),
+        from: q.get('from'),
+        to: q.get('to'),
+      });
+    } catch (err) {
+      if (err instanceof StatsRangeError) {
+        return NextResponse.json(
+          { error: err.code, message: err.message },
+          { status: 400, headers: { 'x-request-id': ctx.requestId } },
+        );
+      }
+      throw err;
+    }
+
+    const stats = await computeAdminStats(prisma, range);
 
     return NextResponse.json(stats, {
       headers: {

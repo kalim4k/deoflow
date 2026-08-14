@@ -20,11 +20,15 @@ import { api } from '@/lib/api';
 
 /* ── Agrégats ───────────────────────────────────────────────────────────── */
 
-export type StatsPeriod = '7d' | '30d' | 'all';
+/** Préréglages proposés en un clic. */
+export type StatsPreset = '7d' | '30d' | 'all';
+/** `custom` ne se choisit pas : il résulte d'un couple de dates. */
+export type StatsPeriod = StatsPreset | 'custom';
 
 export interface AdminStats {
   period: StatsPeriod;
   since: string | null;
+  until: string | null;
   revenue: { grossFcfa: number; orders: number; averageFcfa: number };
   credits: {
     sold: number;
@@ -51,8 +55,21 @@ export interface AdminStats {
   commissions: { earnedFcfa: number; referrals: number };
 }
 
-export function fetchAdminStats(period: StatsPeriod): Promise<AdminStats> {
-  return api<AdminStats>(`/api/admin/stats?period=${period}`);
+/** Fenêtre demandée : soit un préréglage, soit un couple de dates `YYYY-MM-DD`. */
+export type StatsQuery = { preset: StatsPreset } | { from?: string; to?: string };
+
+export function fetchAdminStats(query: StatsQuery): Promise<AdminStats> {
+  const params = new URLSearchParams();
+  if ('preset' in query) {
+    params.set('period', query.preset);
+  } else {
+    // `from` et `to` sont facultatifs séparément : une borne seule donne une
+    // fenêtre ouverte de l'autre côté, ce qui répond à « depuis le 1er août »
+    // comme à « jusqu'au 14 ».
+    if (query.from) params.set('from', query.from);
+    if (query.to) params.set('to', query.to);
+  }
+  return api<AdminStats>(`/api/admin/stats?${params.toString()}`);
 }
 
 /* ── Versements ─────────────────────────────────────────────────────────── */
