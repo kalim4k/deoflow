@@ -21,6 +21,7 @@
     "seed:dev": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-dev.ts",
     "seed:admin": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-admin-demo.ts",
     "smoke:auth": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke-auth.ts",
+    "icons": "node scripts/generate-icons.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -54,6 +55,7 @@
     "fast-glob": "^3.3.3",
     "postcss": "^8.5.0",
     "prisma": "^5.22.0",
+    "sharp": "0.34.5",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.19.2",
     "typescript": "^6.0.3",
