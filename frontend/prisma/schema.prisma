@@ -31,6 +31,29 @@ model User {
   // refused with 403 ACCOUNT_SUSPENDED. Mutated via /api/admin/users/[id]/status
   // (ADMIN can suspend; only SUPERADMIN can restore).
   status            String    @default("ACTIVE") // ACTIVE | SUSPENDED
+
+  // Solde de crédits Deoflow, dénormalisé pour être lu en une requête.
+  //
+  // ⚠️ Ne JAMAIS écrire ce champ directement : il doit rester égal à la somme
+  // du journal `CreditTransaction`. Tout mouvement passe par
+  // `lib/server/credits/` qui met les deux à jour dans une transaction tenue
+  // par `lockUserTx` — sans quoi deux générations lancées en même temps
+  // liraient le même solde et dépenseraient deux fois le même crédit.
+  credits           Int       @default(0)
+
+  // ── Parrainage ────────────────────────────────────────────────────────
+  // Code public partagé par cet utilisateur. Attribué PARESSEUSEMENT, à la
+  // première ouverture de /affiliation : la majorité des comptes ne parraine
+  // jamais, et un code par compte créé encombrerait l'espace de noms pour rien.
+  referralCode      String?   @unique
+
+  // Parrain, figé au premier contact. Ne change JAMAIS ensuite : sans ça, un
+  // filleul re-cliquant sur un autre lien réattribuerait ses achats passés.
+  referredById      String?
+  referredBy        User?     @relation("Referrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals         User[]    @relation("Referrals")
+  referredAt        DateTime?
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -42,6 +65,11 @@ model User {
   withdrawals       Withdrawal[]
   oauthAccounts     OAuthAccount[]
   adminActions      AdminAction[]
+  generations       Generation[]
+  creditTransactions CreditTransaction[]
+  avatars           Avatar[]
+  commissionsEarned    ReferralCommission[] @relation("CommissionEarner")
+  commissionsGenerated ReferralCommission[] @relation("CommissionSource")
 
   // Multi-tenancy is opt-in per project: by default no resource is org-scoped.
   // Apps that need it (marketplace, B2B SaaS, classifieds) wire owner relations
@@ -52,6 +80,7 @@ model User {
   @@index([email])
   @@index([role])
   @@index([status])
+  @@index([referredById])
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -331,4 +360,237 @@ model Withdrawal {
   @@index([userId, requestedAt])
   @@index([status, requestedAt])
   @@index([provider, providerPayoutId])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Deoflow — génération IA et crédits prépayés
+//
+// Le produit vend des crédits achetés en mobile money, consommés par des
+// appels facturés à l'usage chez kie.ai. D'où deux invariants qui gouvernent
+// tout ce bloc :
+//
+//   1. Le solde ne vit QUE côté serveur. Tant qu'il était dans le
+//      localStorage, n'importe qui pouvait s'attribuer un budget de
+//      génération en trois lignes de console.
+//   2. Tout mouvement de crédit s'écrit dans `CreditTransaction` en même
+//      temps que `User.credits`, dans une transaction verrouillée par
+//      utilisateur (`lockUserTx`). Le journal est la vérité ; le champ
+//      `credits` n'en est qu'un raccourci de lecture.
+// ───────────────────────────────────────────────────────────────────────
+
+model Generation {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Le catalogue vit dans le code (`lib/deoflow/catalog.ts`) et peut retirer
+  // un modèle. On dénormalise donc le nom : une génération de janvier doit
+  // rester lisible dans la galerie même si le modèle a disparu depuis.
+  modelSlug String
+  modelName String
+  kind      String // image | video
+  mode      String // text | image | motion | frames | references
+
+  // À quoi sert cette génération.
+  //
+  // Un visage d'avatar sort du même moteur qu'une création, mais ce n'en est
+  // pas une : la galerie du créateur est sa production publiable, pas son
+  // matériel de travail. `GET /api/generations` filtre donc CREATION par
+  // défaut — au niveau de la route, pour que toute surface future hérite du
+  // bon comportement sans y penser.
+  purpose String @default("CREATION") // CREATION | AVATAR
+
+  // Avatar UTILISÉ dans cette génération — permet d'afficher « avec Awa ».
+  // `SetNull` : supprimer un avatar ne doit pas effacer l'historique des
+  // images qu'il a servi à produire.
+  avatarId String?
+  avatar   Avatar? @relation("GenerationAvatar", fields: [avatarId], references: [id], onDelete: SetNull)
+
+  // Prompt RÉELLEMENT envoyé au fournisseur, description de l'avatar comprise.
+  // C'est ce qui permet de rejouer ou de diagnostiquer une génération des mois
+  // plus tard, même si la description de l'avatar a changé depuis.
+  prompt          String  @db.Text
+  ratio           String?
+  durationSeconds Int?
+  // Réglages transmis au fournisseur (character_orientation, generate_audio…).
+  params          Json?
+  // Références envoyées, indexées par clé d'emplacement de l'API :
+  // { "input_urls": ["https://…"], "video_urls": ["https://…"] }
+  inputs          Json?
+
+  // Crédits débités À LA CRÉATION, avant tout appel au fournisseur. Stocké
+  // ici pour que le remboursement d'un échec rende exactement ce qui a été
+  // pris, même si le tarif du catalogue a changé entre-temps.
+  credits Int
+
+  // PENDING   — débité, pas encore soumis au fournisseur
+  // RUNNING   — accepté par le fournisseur, taskId connu
+  // SUCCEEDED — résultat recopié chez nous
+  // FAILED    — échec, crédits remboursés
+  status String @default("PENDING")
+
+  provider       String  @default("kie")
+  providerTaskId String? @unique
+  providerFamily String? // jobs | veo — décide de l'endpoint de sondage
+
+  // URLs renvoyées par kie.ai. TEMPORAIRES : leur documentation annonce une
+  // suppression automatique. Conservées pour le diagnostic, jamais affichées.
+  sourceUrls Json?
+  // URLs Cloudinary — permanentes. C'est ce que la galerie sert.
+  assetUrls  Json?
+
+  failureCode   String?
+  failureReason String?
+
+  // Rejeu d'un double-clic : la même clé renvoie la génération déjà créée au
+  // lieu d'en lancer — et de facturer — une seconde.
+  idempotencyKey String? @unique
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  transactions CreditTransaction[]
+
+  // `purpose` est dans l'index parce que la galerie filtre dessus à chaque
+  // ouverture : sans lui, la requête parcourt toutes les générations de
+  // l'utilisateur pour en écarter quelques-unes.
+  @@index([userId, purpose, createdAt])
+  @@index([status, createdAt])
+  @@index([avatarId])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Avatar — l'influenceur réutilisable du créateur.
+//
+// Ce n'est pas une image, c'est un COUPLE : un visage de référence et une
+// description libre. Le visage porte l'identité ; le texte porte ce qu'un
+// visage ne peut pas dire — la taille, la corpulence, la garde-robe. Les deux
+// sont injectés à chaque génération qui sélectionne l'avatar, si bien que le
+// créateur n'a plus à redécrire son personnage.
+//
+// Le visage est cadré tête-épaules sur FOND BLANC, imposé par le serveur
+// (`lib/server/avatars/portrait.ts`). Un visage pris dans un décor traînerait
+// ce décor dans toutes les scènes suivantes.
+// ───────────────────────────────────────────────────────────────────────
+
+model Avatar {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  // Texte libre : corps, tenue, style, caractère. Injecté avant la scène dans
+  // chaque prompt — les modèles pondèrent plus fortement le début.
+  description String @db.Text
+
+  // Visage sur fond blanc, URL Cloudinary. DÉNORMALISÉ depuis la génération :
+  // l'avatar doit survivre à un nettoyage de la galerie.
+  faceUrl String?
+
+  // Génération qui a produit ce visage. Colonne NUE, sans clé étrangère : la
+  // supprimer ne doit pas emporter l'avatar. Sert à résoudre `faceUrl` a
+  // posteriori quand le créateur a fermé son onglet pendant la génération.
+  faceGenerationId String?
+
+  modelSlug String // nano-banana-2 | gpt-image-2
+
+  // PENDING — le visage se génère encore
+  // READY   — `faceUrl` est renseignée, l'avatar est utilisable
+  // FAILED  — la génération a échoué (crédits déjà remboursés par son service)
+  status String @default("PENDING")
+
+  // Le créateur a déclaré disposer des droits sur la photo d'origine. Nul
+  // quand l'avatar vient d'un simple prompt.
+  photoRightsAckAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Générations qui ont UTILISÉ cet avatar. L'autre lien — celle qui a produit
+  // le visage — est volontairement une colonne nue, voir ci-dessus.
+  usedIn Generation[] @relation("GenerationAvatar")
+
+  @@index([userId, createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Parrainage — 25 % de chaque achat d'un filleul, à vie.
+//
+// Registre en ACCUMULATION, jamais un solde. Trois raisons :
+//
+//   1. La commission naît DANS la transaction qui règle l'achat, verrouillée
+//      sur l'ACHETEUR (`withUserCredits`). Écrire au passage un solde sur la
+//      ligne du parrain se ferait sans tenir SON verrou : deux filleuls payant
+//      en même temps liraient le même solde et l'un des deux gains serait
+//      perdu. Une ligne insérée, elle, ne lit rien.
+//   2. `orderId @unique` rend le double-crédit impossible au niveau de la
+//      base, même si le règlement était rejoué. C'est la deuxième serrure,
+//      derrière la réclamation par `updateMany` de `purchases/service.ts`.
+//   3. Un litige se règle en relisant les lignes, pas en devinant comment un
+//      compteur en est arrivé là.
+//
+// Le solde disponible se calcule : somme(EARNED) − somme(retraits non annulés).
+// Voir `lib/server/referrals/balance.ts`.
+// ───────────────────────────────────────────────────────────────────────
+
+model ReferralCommission {
+  id String @id @default(cuid())
+
+  // Bénéficiaire — le parrain.
+  referrerId String
+  referrer   User   @relation("CommissionEarner", fields: [referrerId], references: [id], onDelete: Cascade)
+
+  // Filleul dont l'achat a produit cette commission.
+  refereeId String
+  referee   User   @relation("CommissionSource", fields: [refereeId], references: [id], onDelete: Cascade)
+
+  // UNE commission par commande, garantie par la base. Le garde-fou ultime.
+  orderId     String @unique
+  orderAmount Int // montant de l'achat, FCFA
+
+  // Taux FIGÉ au moment du gain, en points de base (2500 = 25 %). Changer le
+  // barème demain ne doit pas réécrire ce qui a déjà été gagné.
+  rateBps Int
+  amount  Int // commission due, FCFA — entier, le franc CFA n'a pas de décimale
+
+  // EARNED   — acquise, comptée dans le solde retirable
+  // PAID     — versée (le retrait correspondant est COMPLETED)
+  // REVERSED — annulée (remboursement de l'achat, fraude constatée)
+  status String @default("EARNED")
+
+  createdAt DateTime @default(now())
+
+  @@index([referrerId, createdAt])
+  @@index([refereeId])
+  @@index([status])
+}
+
+model CreditTransaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // SIGNÉ : positif pour un ajout, négatif pour une consommation. Additionner
+  // la colonne doit toujours redonner `User.credits`.
+  credits  Int
+  movement String // PURCHASE | GENERATION | REFUND | ADMIN_ADJUSTMENT
+  label    String
+
+  // Solde après ce mouvement. Permet de reconstituer un litige sans rejouer
+  // tout le journal, et de repérer une incohérence d'un simple coup d'œil.
+  balanceAfter Int
+
+  // Montant payé en FCFA (entier — le franc CFA n'a pas de décimale).
+  // Renseigné pour un achat uniquement.
+  amountFcfa Int?
+
+  generationId String?
+  generation   Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+  orderId      String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([generationId])
 }

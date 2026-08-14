@@ -47,7 +47,8 @@ import { requireAuth } from '@/lib/server/middleware';
 import { prisma } from '@/lib/server/prisma';
 
 import { lockUserTx } from '@/lib/server/withdrawals/lock';
-import { createDefaultBalanceComputer } from '@/lib/server/withdrawals/balance';
+import { createCommissionBalanceComputer } from '@/lib/server/referrals/balance';
+import { PAYOUT_METHOD_IDS } from '@/lib/deoflow/payout';
 import { loadGuardConfigFromEnv, validateWithdrawalRequest } from '@/lib/server/withdrawals/guards';
 import { verifyPin } from '@/lib/server/auth/pin';
 import { createNotification } from '@/lib/server/notifications';
@@ -73,7 +74,11 @@ const Body = z.object({
   amount: z.number().int().positive(),
   currency: z.literal('XOF').default('XOF'),
   destination: z.object({
-    method: z.enum(['WAVE', 'ORANGE_MONEY', 'MTN_MOMO']),
+    // La liste du starter ne couvrait que le Sénégal. Deoflow encaisse et
+    // verse au Togo : Mixx by Yas (ex-T-Money, Togocom) et Moov Money (Flooz)
+    // y sont les deux opérateurs réels. Les trois autres restent pour les
+    // filleuls de la sous-région. Source unique : `lib/deoflow/payout.ts`.
+    method: z.enum(PAYOUT_METHOD_IDS),
     phone: z.string().regex(/^\+\d{10,15}$/, 'phone must be E.164 (e.g. +221XXXXXXXX)'),
     accountName: z.string().max(120).optional(),
   }),
@@ -106,7 +111,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     //    `WITHDRAWAL_BALANCE_CHECK=0` flips `balanceCheckEnabled` off (T-04-04-05
     //    accepted, documented in `.env.example`).
     const config = loadGuardConfigFromEnv(process.env);
-    const computeBalance = createDefaultBalanceComputer(prisma);
+    // Les commissions de parrainage, et RIEN d'autre. Le calcul du starter
+    // comptait les commandes payées de l'utilisateur comme des gains — chez
+    // Deoflow une commande payée est un achat de crédits, donc de l'argent
+    // sorti de sa poche. Voir `referrals/balance.ts`.
+    const computeBalance = createCommissionBalanceComputer(prisma);
 
     try {
       const result = await prisma.$transaction(

@@ -17,6 +17,13 @@ export default defineConfig({
     // test module imports `@/lib/server/auth` (which throws at import time
     // when JWT_SECRET is missing or < 32 chars).
     setupFiles: ['./vitest.setup.ts'],
+    // Vitest's 5s default is too tight for the bcrypt-heavy tests (seed-dev
+    // hashes several users; the signup rate-limit case runs 5 full signups).
+    // On a slower dev machine they land at ~5s idle and blow past 15s as soon
+    // as anything else competes for CPU (a dev server, an editor). 30s keeps
+    // the ceiling meaningful for a genuine hang while tolerating a busy
+    // laptop. No assertion is relaxed — only the wall-clock limit.
+    testTimeout: 30_000,
   },
   resolve: {
     alias: {

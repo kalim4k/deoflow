@@ -24,6 +24,7 @@ import {
   setCsrfCookie,
   verifyPassword,
 } from '@/lib/server/auth';
+import { requiresEmailVerification } from '@/lib/server/auth/email-verification';
 import { isLockedOut, recordFailure, recordSuccess } from '@/lib/server/auth/lockout';
 import { dummyBcryptCompare } from '@/lib/server/auth/dummy-bcrypt';
 import { createEmailLimiter } from '@/lib/server/middleware/rate-limit-by-email';
@@ -132,7 +133,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     // 7. emailVerifiedAt check — after credential match (D-24).
     //    Don't recordFailure here; it's not a credential failure.
-    if (!user.emailVerifiedAt) {
+    //    Sauté quand AUTH_REQUIRE_EMAIL_VERIFICATION="0" : sans cette
+    //    exception, les comptes créés avant la désactivation resteraient
+    //    bloqués sur un code qu'aucun email ne leur apportera.
+    if (requiresEmailVerification() && !user.emailVerifiedAt) {
       return NextResponse.json(
         { error: 'EMAIL_NOT_VERIFIED', message: 'Please verify your email first.' },
         { status: 403, headers: { 'x-request-id': ctx.requestId } },

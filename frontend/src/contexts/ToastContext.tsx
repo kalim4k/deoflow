@@ -51,14 +51,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-center gap-3 rounded-2xl border px-5 py-3.5 text-sm font-medium shadow-lg transition-opacity ${
+            className={`pointer-events-auto flex items-center gap-3 rounded-2xl border bg-surface px-5 py-3.5 text-sm font-medium shadow-lg transition-opacity ${
               t.exiting ? 'opacity-0' : 'opacity-100'
             } ${
               t.type === 'success'
-                ? 'border-green-200 bg-white text-green-700'
+                ? 'border-gain-600/25 text-gain-700'
                 : t.type === 'error'
-                  ? 'border-red-200 bg-white text-red-700'
-                  : 'border-gray-200 bg-white text-gray-700'
+                  ? 'border-loss-600/25 text-loss-700'
+                  : 'border-line text-ink-700'
             }`}
             style={{ maxWidth: '90vw' }}
           >

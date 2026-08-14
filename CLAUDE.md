@@ -25,7 +25,7 @@ pnpm workspace — run from repo root unless noted. The root `package.json` is a
 
 | Task | Command |
 |---|---|
-| Dev (Next.js on :3000, Turbopack) | `pnpm dev` |
+| Dev (Next.js on :3001, Turbopack) | `pnpm dev` |
 | Build | `pnpm build` |
 | Apply Prisma schema (dev iteration) | `pnpm db:push` |
 | Versioned migrations | `pnpm db:migrate:dev` (local) / `pnpm db:migrate:deploy` (CI/prod) |
@@ -67,13 +67,21 @@ Integration tests are deferred (no formal harness in v1) — `pnpm smoke:auth` p
 
 **Payments are pluggable** behind the `PaymentProvider` interface ([frontend/src/lib/server/payments/](frontend/src/lib/server/payments/)). Bictorys is the default. A single in-memory `CircuitBreaker` guards charge calls. Webhook replay window defaults to 60s (`BICTORYS_WEBHOOK_REPLAY_WINDOW_MS` to override).
 
-**Cron strategy.** No `setInterval` loops — Next.js / Vercel doesn't keep long-lived processes. Background work runs as **Vercel Cron** routes under `app/api/cron/<name>/route.ts`, each gated by `Authorization: Bearer ${CRON_SECRET}`. Targets: `outbox-drain` (1m), `email-queue-drain` (1m), `verification-cleanup` (hourly), `order-expiration` (5m), `webhook-log-purge` (daily), `email-job-purge` (daily — purges SENT EmailJob rows older than `EMAIL_JOB_RETENTION_DAYS`, default 30). Multi-instance coordination still uses [frontend/src/lib/server/leader-lease.ts](frontend/src/lib/server/leader-lease.ts) Redis leases where two crons could collide. The Bictorys charge `CircuitBreaker` is still in-memory single-instance — replace with a Redis-backed variant for multi-pod prod (documented limitation).
+**Cron strategy.** No `setInterval` loops — Next.js / Vercel doesn't keep long-lived processes. Background work runs as **Vercel Cron** routes under `app/api/cron/<name>/route.ts`, each gated by `Authorization: Bearer ${CRON_SECRET}`. Targets: `outbox-drain` (1m), `email-queue-drain` (1m), `verification-cleanup` (hourly), `order-expiration` (5m), `purchase-reconcile` (5m — **load-bearing**, see below), `webhook-log-purge` (daily), `email-job-purge` (daily — purges SENT EmailJob rows older than `EMAIL_JOB_RETENTION_DAYS`, default 30).
+
+⚠️ `purchase-reconcile` is not a safety net. Maketou — the Togolese mobile-money provider that sells credits — has **no webhook of any kind**: its whole API is `POST /cart/checkout` + `GET /cart/{id}`. Buyers confirm in their operator's app and rarely return to the tab, so most payments are confirmed *after* the browser stops polling. Delete this cron and paid credits are silently never delivered. It is also the one cron exporting both `GET` and `POST`, because Vercel Cron fires `GET` (the six inherited crons export `POST` only — a latent issue in the starter, not yet addressed). Multi-instance coordination still uses [frontend/src/lib/server/leader-lease.ts](frontend/src/lib/server/leader-lease.ts) Redis leases where two crons could collide. The Bictorys charge `CircuitBreaker` is still in-memory single-instance — replace with a Redis-backed variant for multi-pod prod (documented limitation).
 
 **Google OAuth (Sign in with Google)** — [frontend/src/lib/server/oauth/google.ts](frontend/src/lib/server/oauth/google.ts) + Phase 2 route handlers under `frontend/src/app/api/auth/oauth/google/{start,callback}/route.ts`. Implemented with `arctic` (OAuth 2.0 + PKCE). `start` issues state + PKCE-verifier cookies (5min, path-scoped to `/api/auth/oauth`) and 302s to Google. `callback` validates state, exchanges code, decodes ID token, refuses unverified emails, find-or-create user with account linking by email, then issues our standard auth cookies. Frontend errors land on `/auth/error?code=…` (see [examples/frontend-pages/auth-error.tsx](examples/frontend-pages/auth-error.tsx)). Inert without `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI`.
 
 **Multi-tenancy is opt-in.** [frontend/src/lib/server/middleware/require-org-role.ts](frontend/src/lib/server/middleware/require-org-role.ts) ships role types + rank helpers (`OWNER` > `ADMIN` > `MEMBER`). Default project surface stays user-owned (`Order.userId`, `Withdrawal.userId`). Apps that need orgs add `organizationId String?` on their domain models case by case and gate routes via `requireOrgRole('ADMIN', 'orgId')` from the middleware HOFs. Owner promotion is transactional (3 ops in a single tx). Non-members get **404, not 403**, to avoid leaking org existence.
 
-**Admin back-office** — [frontend/src/lib/server/admin/audit.ts](frontend/src/lib/server/admin/audit.ts) + [frontend/src/lib/server/middleware/require-admin.ts](frontend/src/lib/server/middleware/require-admin.ts). App-wide role on `User` (`USER` < `ADMIN` < `SUPERADMIN`). Phase-5 endpoints under `/api/admin/*` cover users (search/detail/role-change), orders (filter), withdrawals (filter + manual cancel), audit-log (paginated/filterable), and `/me` (admin probe). Every mutation calls `logAdminAction(prisma, {...})` → `AdminAction` row so we can answer "who did what when" during incidents. Bootstrap the first SUPERADMIN with `pnpm db:make-superadmin <email>` (the script lives at [frontend/scripts/make-superadmin.ts](frontend/scripts/make-superadmin.ts)).
+**Admin back-office** — [frontend/src/lib/server/admin/audit.ts](frontend/src/lib/server/admin/audit.ts) + [frontend/src/lib/server/middleware/require-admin.ts](frontend/src/lib/server/middleware/require-admin.ts). App-wide role on `User` (`USER` < `ADMIN` < `SUPERADMIN`). Endpoints under `/api/admin/*` cover users (search/detail/role-change/suspend, with `credits`), orders, withdrawals (filter + lifecycle + manual cancel), credits (ledger + manual adjustment), generations (support), stats (aggregates), audit-log, and `/me` (admin probe + capability list). Every mutation calls `logAdminAction(prisma, {...})` → `AdminAction` row so we can answer "who did what when" during incidents. Bootstrap the first SUPERADMIN with `pnpm db:make-superadmin <email>` (the script lives at [frontend/scripts/make-superadmin.ts](frontend/scripts/make-superadmin.ts)); `pnpm seed:admin` / `--clean` seeds and removes a reversible demo dataset so the money screens can be verified against known totals.
+
+Two money rules the back-office must keep:
+- **Settling a withdrawal** ([api/admin/withdrawals/[id]/route.ts](frontend/src/app/api/admin/withdrawals/[id]/route.ts)) takes `lockUserTx` and **re-reads the row under the lock** before applying the transition — locking then acting on a row read *before* protects nothing. Terminal states never reopen; a correction is a new request. `providerPayoutId` is `@unique`, and that constraint — not an application check — is what stops the same payout being recorded twice, so it is mandatory on `COMPLETED`.
+- **Manual credit adjustment** ([api/admin/credits/route.ts](frontend/src/app/api/admin/credits/route.ts)) goes through `withUserCredits` + `creditCredits`/`debitCredits` with `movement: 'ADMIN_ADJUSTMENT'`, never a direct write to `User.credits`. Reason is mandatory. SUPERADMIN only — these credits were paid by nobody and burn real kie.ai money when spent.
+
+`ReferralCommission.status` stays `EARNED` even after payout: the available balance already subtracts `PENDING`/`PROCESSING`/`COMPLETED` withdrawals ([referrals/balance.ts](frontend/src/lib/server/referrals/balance.ts)), so flipping it would need a FIFO commission↔withdrawal allocation — a second money calculation able to diverge from the first, for a cosmetic gain. **`REVERSED` is not wired**: when a refund flow lands, it must set it.
 
 ## Files Claude must NOT modify (battle-tested)
 
@@ -115,7 +123,7 @@ If a change is genuinely required in any of these, surface a brief "I am about t
 - Withdrawal balance check is ON by default (`WITHDRAWAL_BALANCE_CHECK=0` to disable). Disabling on a real-money project is a financial-safety risk — only do it if you have an alternative ledger.
 - Withdrawal guards return **stable error codes** (`AMOUNT_BELOW_MIN`, `AMOUNT_ABOVE_MAX`, `DAILY_LIMIT_EXCEEDED`, `COOLDOWN_ACTIVE`, `PIN_NOT_SET`, `PIN_REQUIRED`, `PIN_INVALID`, `INSUFFICIENT_BALANCE`). Frontend switches on `ApiError.code`, not translated messages.
 - Frontend `api()` retries only `GET`/`HEAD` on network errors. Do not extend to `POST`/`PUT`/`PATCH`/`DELETE`.
-- Signup never sets cookies and never reveals email existence. Cookies are issued by `/verify-email` after the user enters their code.
+- Signup never sets cookies and never reveals email existence. Cookies are issued by `/verify-email` after the user enters their code. **Escape hatch:** `AUTH_REQUIRE_EMAIL_VERIFICATION="0"` makes signup create an already-verified user and issue the session on the spot, and makes login skip the verified-email gate. That trades away enumeration resistance and proof-of-address — it exists because no email provider is wired in dev. Default stays `"1"`; see [frontend/src/lib/server/auth/email-verification.ts](frontend/src/lib/server/auth/email-verification.ts).
 - Upload route enforces magic-byte validation against `UPLOAD_ALLOWED_MIME` via [frontend/src/lib/server/upload/sniff.ts](frontend/src/lib/server/upload/sniff.ts) — don't bypass by trusting `File.type` alone.
 - Admin mutations MUST go through `logAdminAction(prisma, {...})` — every back-office write is auditable. Skipping it is a compliance regression.
 - Admin role precedence: `USER` < `ADMIN` < `SUPERADMIN`. Only SUPERADMIN can change roles. The route refuses to demote the **last** SUPERADMIN to avoid locking the org out.
@@ -125,15 +133,28 @@ If a change is genuinely required in any of these, surface a brief "I am about t
 - Cookies stay `httpOnly` + `Secure` (prod) + `SameSite=Lax`.
 - Sentry init stays in [frontend/instrumentation.ts](frontend/instrumentation.ts) `register()` — do not move it into a route module (the hook fires before app code, route imports do not).
 
-## Design system — fully swappable (no UI shipped)
+## Design system — fully swappable
 
-The starter is **headless on purpose**. Touchpoints if a fork wants a specific design:
+### The app on top of this starter: Deoflow
 
-- [frontend/src/app/page.tsx](frontend/src/app/page.tsx) — `return null`. Write your homepage here. No layout assumption is baked into the API.
-- [frontend/src/app/layout.tsx](frontend/src/app/layout.tsx) — Inter font + 2 client contexts (`AuthProvider`, `ToastProvider`). Both are logic-only — swap the font, restyle toasts in your own components, keep the providers (they wrap the `api()` wrapper's auto-refresh + the toast queue).
-- [frontend/src/app/globals.css](frontend/src/app/globals.css) — one line: `@import 'tailwindcss';` (Tailwind v4 zero-config). Drop it + remove `@tailwindcss/postcss` from [frontend/postcss.config.mjs](frontend/postcss.config.mjs) to leave Tailwind out entirely.
-- [frontend/src/app/error.tsx](frontend/src/app/error.tsx) — Tailwind-styled fallback. Replace freely.
-- [examples/frontend-pages/](examples/frontend-pages/) — 11 reference pages (login/signup/verify-email/forgot-reset-password/dashboard/withdrawals/payment-success+failure/auth-error/admin/*). They are NOT imported anywhere — they live as Tailwind references to copy or rebuild.
+The fork's product is **Deoflow** — AI image/video generation for francophone West-African TikTok creators, paid in prepaid credits bought via Tmoney/Flooz. Spec: [.planning/prd-deoflow.md](.planning/prd-deoflow.md), art direction brief: [.planning/design-brief-deoflow.md](.planning/design-brief-deoflow.md).
+
+A complete French-language UI ships in `frontend/src/app/*` — 24 pages covering the PRD's 15 screens. It is **product surface, not protected code**: restyle, rewrite or delete any of it.
+
+> **The Deoflow domain is now server-backed.** Prisma carries `Generation`, `Avatar`, `CreditTransaction` and `ReferralCommission` alongside the generic models. Credits, generations, avatars, affiliation, withdrawals and the whole back-office run on real routes under `/api/*`. What remains in [frontend/src/lib/deoflow/](frontend/src/lib/deoflow/) is either shared pure logic (`pricing.ts`, `capabilities.ts`, `packs.ts` — imported by both sides) or the residual `localStorage` layer (`client.ts` / `useDeoflow.ts`) still feeding a few creator-side screens. Any screen fed by simulated data says so on screen — keep that honesty when you extend them.
+>
+> **No `/admin/**` page may import `client.ts` or `useDeoflow.ts`.** A back-office that reads `localStorage` shows the *administrator's own browser* with the authority of a back-office — a false-but-credible revenue figure, which is worse than a missing screen. [back-office-shape.test.ts](frontend/src/lib/server/admin/back-office-shape.test.ts) fails CI if one does, and also checks that every admin route carries `runtime='nodejs'` + a role guard + rate limit, and that every admin mutation carries `verifyCsrf` + `logAdminAction`.
+>
+> The brief asks for a **dark** interface; the shipped UI is **light**, per a later explicit decision by the repo owner. The brief has not been updated.
+
+Touchpoints if a fork wants a different design:
+
+- [frontend/src/app/globals.css](frontend/src/app/globals.css) — all design tokens live in the `@theme` block (`canvas`, `surface`, `sunken`, `ink-*`, `line*`, `ember-*`, `gain/loss/info`) plus the `.card` / `.chrome` / `.checkerboard` / `.pressable` component classes. No component hardcodes a hex value: change the tokens, the whole app follows. Drop the file + remove `@tailwindcss/postcss` from [frontend/postcss.config.mjs](frontend/postcss.config.mjs) to leave Tailwind out entirely.
+- [frontend/src/app/layout.tsx](frontend/src/app/layout.tsx) — Space Grotesk for display type, the system font stack for body copy (deliberate: the target audience is on unstable 4G, so only one webfont is loaded), plus 2 client contexts (`AuthProvider`, `ToastProvider`). Swap the fonts freely, keep the providers (they wrap the `api()` wrapper's auto-refresh + the toast queue).
+- [frontend/src/components/](frontend/src/components/) — `ui/` primitives (Button, Field, Feedback, Table, Modal), `icons.tsx` (inline SVG set, no dependency), plus the `marketing/`, `auth/`, `app/`, `admin/` shells. Replace with shadcn/ui or any library without touching the API layer.
+- [frontend/src/lib/errorMessages.ts](frontend/src/lib/errorMessages.ts) — French translations keyed by the API's stable error codes. Pages branch on `ApiError.code` and call `errorMessage(err)`; add a key here rather than matching on `.message`.
+- [frontend/src/app/status/page.tsx](frontend/src/app/status/page.tsx) — the env-diagnostic page the starter used to serve at `/`. Kept out of the navigation.
+- [examples/frontend-pages/](examples/frontend-pages/) — the 11 original English reference pages, still NOT imported anywhere and now **superseded**. Two are also stale against the API (`withdrawals.tsx` calls a `GET /api/auth/withdrawal-pin` that does not exist and lists a `FREE_MONEY` method the schema rejects; `admin/withdrawals.tsx` reads a nested `user` object the endpoint does not return). Use the live pages under `src/app/` as the reference.
 
 **No server lib reaches into the DOM.** Routes only return `NextResponse.json(...)`. The same backend feeds plain React, shadcn/ui, Mantine, a SwiftUI client, a Flutter app — pick anything.
 

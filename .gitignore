@@ -21,3 +21,13 @@ next-env.d.ts
 amp
 node-compile-cache/
 
+# Sources d'illustrations. Les PNG bruts (34 Mo, en double à la racine et dans
+# « Images de models/ ») ne sont jamais lus par l'application : elle sert les
+# .webp de frontend/public/models/, qui en sont la conversion optimisée et
+# pèsent 160 Ko au total. Git conserve tout blob à vie, même supprimé plus
+# tard — les committer alourdirait chaque clone et chaque déploiement Vercel
+# pour toujours, sans rien apporter.
+/*.png
+/Images  de models/
+/Gpt Image 2 Image To Image API Do.txt
+

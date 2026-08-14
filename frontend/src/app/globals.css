@@ -1,1 +1,329 @@
 @import 'tailwindcss';
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Design system — Deoflow
+   Thème clair intégral. Parti pris : bento clair, contenu au centre, zéro
+   décoration. Un seul accent chaud (ember) réservé aux crédits et à l'action
+   principale — pas de violet, pas de gradient violet→rose, pas de glow
+   (proscrits par .planning/design-brief-deoflow.md).
+
+   Cible : navigateur mobile Android sur 4G instable. D'où le corps en
+   system-ui (zéro octet à télécharger) et une seule police display chargée.
+
+   Tout se re-skinne depuis ce bloc : aucun composant ne code un hex en dur.
+   ───────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Fonds */
+  --color-canvas: #fafafa;
+  --color-surface: #ffffff;
+  --color-sunken: #f2f2f4;
+
+  /* Encres — contraste vérifié sur --color-canvas */
+  --color-ink-900: #0b0b0c; /* 18.4:1 — texte principal, boutons primaires */
+  --color-ink-700: #34383f; /* 10.6:1 — titres secondaires */
+  --color-ink-500: #5b5f66; /*  6.2:1 — texte secondaire */
+  --color-ink-300: #8a8f98; /*  3.5:1 — méta, libellés non essentiels */
+
+  /* Traits */
+  --color-line: #e6e7ea;
+  --color-line-strong: #d3d5da;
+
+  /* Accent — crédits, recharge, mise en avant */
+  --color-ember-50: #fff3ee;
+  --color-ember-100: #ffe1d4;
+  --color-ember-500: #ff5a1f;
+  --color-ember-600: #e2440c;
+  --color-ember-700: #b83609;
+
+  /* Statuts */
+  --color-gain-50: #ecfdf3;
+  --color-gain-600: #16a34a;
+  --color-gain-700: #15803d;
+  --color-loss-50: #fef2f2;
+  --color-loss-600: #dc2626;
+  --color-loss-700: #b91c1c;
+  --color-info-50: #eff6ff;
+  --color-info-600: #2563eb;
+
+  --font-display: var(--font-space-grotesk), system-ui, sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+    /* Le fond est peint sur html aussi : évite un flash sombre au chargement
+       sur les navigateurs Android en thème système sombre. */
+    background-color: var(--color-canvas);
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-size: 1rem; /* 16px minimum sur mobile */
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Tracking spécifique à la taille (apple-design §15) : les grands titres
+     se resserrent, le corps reste à ~0. Une valeur unique serait fausse
+     quelque part. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+  }
+
+  h3,
+  h4 {
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ink-900);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  ::placeholder {
+    color: var(--color-ink-300);
+  }
+
+  /* L'app est en thème clair uniquement : on l'annonce pour que les
+     contrôles natifs (select, date, scrollbar) suivent. */
+  :root {
+    color-scheme: light;
+  }
+}
+
+@layer components {
+  /* Surface de base du système. Ombre volontairement ténue : la séparation
+     vient de la bordure, pas d'un effet. */
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px rgba(11, 11, 12, 0.04);
+  }
+
+  /* Carte cliquable : la bordure se raffermit au survol. Pas de translation
+     ni d'ombre portée qui grossit — ça déplacerait le contenu voisin. */
+  .card-link {
+    transition:
+      border-color 200ms ease,
+      background-color 200ms ease,
+      transform 100ms ease-out;
+  }
+
+  .card-link:hover {
+    border-color: var(--color-line-strong);
+  }
+
+  /* Tiroir de navigation mobile. Entrée et sortie par le même bord (§7
+     apple-design) ; la durée reste sous 250 ms pour ne pas retarder la
+     navigation. */
+  @keyframes drawer-in {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes veil-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Anneau qui pulse autour du bouton de recharge quand le solde est bas.
+     Seule l'ombre est animée : le `transform` reste disponible pour le retour
+     au pointer-down de `.pressable`, et rien ne bouge dans la mise en page. */
+  @keyframes attention-ring {
+    0% {
+      box-shadow: 0 0 0 0 rgba(255, 90, 31, 0.55);
+    }
+    70% {
+      box-shadow: 0 0 0 8px rgba(255, 90, 31, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(255, 90, 31, 0);
+    }
+  }
+
+  .attention {
+    animation: attention-ring 2.2s ease-out infinite;
+  }
+
+  /* Entrée à l'ouverture de la page. `both` fige l'état initial : sans lui,
+     l'élément s'afficherait une frame avant de sauter à sa position de
+     départ. En mouvement réduit, la règle globale ramène la durée à ~0 et
+     l'élément apparaît directement à son état final — rien ne disparaît. */
+  @keyframes rise-in {
+    from {
+      opacity: 0;
+      transform: translateY(14px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .rise-in {
+    animation: rise-in 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  /* Bandeau défilant. La piste contient deux fois la même liste et se
+     translate de -50 % à 0 : la boucle est sans couture et va vers la droite.
+     L'état final (translateX(0)) est lisible tel quel, donc l'arrêt imposé par
+     `prefers-reduced-motion` laisse un bandeau statique correct. */
+  @keyframes marquee-ltr {
+    from {
+      transform: translateX(-50%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  .marquee {
+    overflow: hidden;
+    /* Les extrémités s'estompent : le contenu entre et sort du champ au lieu
+       d'être tranché net par le bord. */
+    mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+  }
+
+  .marquee-track {
+    display: flex;
+    width: max-content;
+    animation: marquee-ltr 38s linear infinite;
+  }
+
+  .marquee:hover .marquee-track {
+    animation-play-state: paused;
+  }
+
+  /* Barre de navigation en cours. Indéterminée : on ne connaît pas la durée
+     réelle, donc elle progresse vite au début puis ralentit et se cale à 90 %.
+     Elle disparaît en étant démontée, jamais en atteignant 100 % — promettre
+     la fin alors qu'on ne la connaît pas serait mentir à l'utilisateur. */
+  @keyframes route-bar {
+    0% {
+      width: 0%;
+    }
+    40% {
+      width: 55%;
+    }
+    100% {
+      width: 90%;
+    }
+  }
+
+  .route-bar {
+    animation: route-bar 4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  /* Arrivée du contenu d'une page. Court et sans déplacement vertical :
+     l'écran ne doit pas donner l'impression de sauter à chaque navigation. */
+  @keyframes page-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .page-in {
+    animation: page-in 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .drawer-panel {
+    animation: drawer-in 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .drawer-veil {
+    animation: veil-in 200ms ease-out;
+  }
+
+  /* Chrome flottant (en-tête). Translucide plutôt qu'opaque, le contenu
+     défile dessous (apple-design §12). */
+  .chrome {
+    background-color: rgba(250, 250, 250, 0.82);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+  }
+
+  /* Damier neutre derrière une image générée : rend visible la transparence
+     et les bords clairs d'un rendu. */
+  .checkerboard {
+    background-color: var(--color-sunken);
+    background-image:
+      linear-gradient(45deg, #e8e8ec 25%, transparent 25%),
+      linear-gradient(-45deg, #e8e8ec 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e8e8ec 75%),
+      linear-gradient(-45deg, transparent 75%, #e8e8ec 75%);
+    background-size: 16px 16px;
+    background-position:
+      0 0,
+      0 8px,
+      8px -8px,
+      -8px 0;
+  }
+
+  /* Retour visuel au pointer-down, pas au relâchement (apple-design §1). */
+  .pressable {
+    transition:
+      transform 100ms ease-out,
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 200ms ease;
+  }
+
+  .pressable:active {
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .pressable:active {
+    transform: none;
+  }
+}
+
+/* Transparence réduite : on solidifie le chrome plutôt que de le flouter. */
+@media (prefers-reduced-transparency: reduce) {
+  .chrome {
+    background-color: var(--color-canvas);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

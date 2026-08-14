@@ -43,6 +43,10 @@ const WITHDRAWAL_SELECT = {
   requestedAt: true,
   processedAt: true,
   completedAt: true,
+  // Sans l'e-mail, l'administrateur voit un identifiant opaque et ne sait pas
+  // QUI il s'apprête à payer — il devrait ouvrir la fiche du compte pour
+  // chaque ligne. Même autorisation que `destination` ci-dessus (D-ADMIN-03).
+  user: { select: { email: true, name: true } },
 } as const satisfies Prisma.WithdrawalSelect;
 
 function parseDate(raw: string | null): Date | null {

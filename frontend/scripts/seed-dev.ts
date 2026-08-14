@@ -13,6 +13,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { pathToFileURL } from 'node:url';
 
 const SEED_USERS = [
   { email: 'admin@example.com', password: 'AdminPassword123!', role: 'SUPERADMIN' },
@@ -67,7 +68,10 @@ export async function main(_args: string[] = [], deps: SeedDeps = {}): Promise<v
 
 // CLI entrypoint guard — only run when invoked as a script, not when
 // imported by tests.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, not `file://${argv[1]}`: on Windows argv[1] is a backslashed
+// drive path (C:\…) that never matches import.meta.url (file:///C:/…). Still
+// inert under Vitest, where argv[1] is the runner, not this file.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
     .then(() => process.exit(0))
     .catch((err) => {

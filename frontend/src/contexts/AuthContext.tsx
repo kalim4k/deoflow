@@ -9,6 +9,8 @@ import { COOKIE_PREFIX } from '@/lib/constants';
 export interface User {
   id: string;
   email: string;
+  /** Nom d'affichage — issu du profil OAuth, null pour une inscription email. */
+  name: string | null;
   emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -20,6 +22,18 @@ export interface User {
 
 interface AuthContextValue {
   user: User | null;
+  /**
+   * Solde de crédits, servi par `/api/auth/me` en même temps que le profil.
+   *
+   * Il vit ici plutôt que dans son propre appel réseau parce que la ligne
+   * utilisateur est de toute façon lue à chaque chargement : une colonne de
+   * plus ne coûte rien, un appel de plus coûtait trois requêtes SQL et un
+   * aller-retour que le navigateur devait attendre. Voir `CreditsContext`,
+   * qui n'est plus qu'une vue sur cette valeur.
+   *
+   * `null` tant que la session n'a pas répondu — à ne pas confondre avec 0.
+   */
+  credits: number | null;
   loading: boolean;
   loggingOut: boolean;
   error: string | null;
@@ -31,6 +45,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [credits, setCredits] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +53,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchUser = useCallback(async () => {
     setError(null);
     try {
-      const res = await api<{ user: User; csrfToken?: string }>('/api/auth/me');
+      const res = await api<{ user: User; credits?: number; csrfToken?: string }>('/api/auth/me');
       setUser(res.user);
+      setCredits(res.credits ?? 0);
       if (res.csrfToken) storeCsrfToken(res.csrfToken);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setUser(null);
+        // Session finie : 0 est ici un fait, pas une valeur d'attente.
+        setCredits(0);
       } else if (err instanceof ApiError && err.status === 429) {
         setError('Too many requests. Wait a few minutes and try again.');
       } else {
@@ -66,6 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .split(';')
       .some((c) => c.trim().startsWith(`${csrfCookieName}=`));
     if (!hasCookie) {
+      setCredits(0);
       setLoading(false);
       return;
     }
@@ -83,11 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearCsrfToken();
     invalidateCachePrefix('/api/');
     setUser(null);
+    setCredits(0);
     setLoggingOut(false);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, loggingOut, error, refresh: fetchUser, logout }}>
+    <AuthContext.Provider
+      value={{ user, credits, loading, loggingOut, error, refresh: fetchUser, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -95,6 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 const SSR_STUB: AuthContextValue = {
   user: null,
+  // `null` et non 0 : le rendu serveur ne sait rien du solde, et afficher un
+  // zéro le temps de l'hydratation était exactement le défaut corrigé.
+  credits: null,
   loading: true,
   loggingOut: false,
   error: null,

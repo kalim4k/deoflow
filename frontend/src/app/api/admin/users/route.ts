@@ -34,6 +34,10 @@ const USER_SELECT = {
   status: true,
   emailVerifiedAt: true,
   createdAt: true,
+  // Solde de crédits — nécessaire pour ajuster un portefeuille qu'on ne voit
+  // pas. Ce n'est pas une donnée sensible au sens du secret : c'est la valeur
+  // que le créateur lit lui-même sur chacun de ses écrans.
+  credits: true,
 } as const satisfies Prisma.UserSelect;
 
 const Q_MAX = 200;

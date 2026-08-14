@@ -16,6 +16,9 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { AuthShell } from '@/components/auth/AuthShell';
+import { buttonStyles } from '@/components/ui/Button';
+import { Alert } from '@/components/ui/Feedback';
 
 const ERROR_MESSAGES: Record<string, string> = {
   GOOGLE_EMAIL_NOT_VERIFIED:
@@ -37,22 +40,25 @@ function AuthErrorBody() {
     'Une erreur inconnue est survenue pendant la connexion. Réessayez.';
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-6 px-4">
-      <h1 className="text-2xl font-bold">Échec de connexion</h1>
-      <p className="text-sm text-gray-700">{message}</p>
-      {code && <p className="font-mono text-xs text-gray-400">code: {code}</p>}
-      <div className="flex flex-col gap-2">
-        <Link
-          href="/login"
-          className="rounded-md bg-black px-5 py-2.5 text-center text-sm font-medium text-white hover:bg-gray-800"
-        >
-          Retour à la connexion
-        </Link>
-        <Link href="/" className="text-center text-sm text-gray-600 underline">
-          Accueil
-        </Link>
+    <AuthShell
+      title="Échec de connexion"
+      subtitle="La connexion via un fournisseur externe n’a pas abouti."
+    >
+      <div className="flex flex-col gap-5">
+        <Alert tone="error">{message}</Alert>
+
+        {code && <p className="font-mono text-xs text-ink-300">code : {code}</p>}
+
+        <div className="flex flex-col gap-3">
+          <Link href="/login" className={buttonStyles('primary', 'md', 'w-full')}>
+            Retour à la connexion
+          </Link>
+          <Link href="/signup" className={buttonStyles('secondary', 'md', 'w-full')}>
+            Créer un compte avec un email
+          </Link>
+        </div>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 

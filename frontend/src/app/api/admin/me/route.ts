@@ -14,11 +14,12 @@
 // here too, so a polling UI cannot burn the back-office budget.
 //
 // CAPABILITY LIST CONTRACT (D-ADMIN-04 — locked):
-//   ADMIN sees 8 capabilities: users:read, users:status:suspend,
-//     orders:read, withdrawals:read, audit-log:read, outbox:read,
-//     email-queue:read, rate-limits:read.
-//   SUPERADMIN sees 11: same 8 + users:role + users:status:restore +
-//     withdrawals:cancel.
+//   ADMIN sees 12 capabilities: users:read, users:status:suspend,
+//     orders:read, withdrawals:read, withdrawals:process, audit-log:read,
+//     outbox:read, email-queue:read, rate-limits:read, stats:read,
+//     generations:read, credits:read.
+//   SUPERADMIN sees 17: same 12 + users:role + users:status:restore +
+//     withdrawals:settle + withdrawals:cancel + credits:adjust.
 //
 // Front-end teams can pivot off this shape; changing the list is a
 // breaking change to the back-office UI.
@@ -30,16 +31,25 @@ import { requireAdmin } from '@/lib/server/middleware';
 import { enforceAdminRateLimit } from '@/lib/server/middleware/rate-limit-by-userid';
 import { makeRequestContext, withRequestContext } from '@/lib/server/observability/request-context';
 
+// Ajouts Deoflow (back-office complet) : `stats:read`, `generations:read`,
+// `credits:read` et `withdrawals:process` sont de la lecture ou de la
+// coordination — ouverts à ADMIN. `withdrawals:settle` (marquer versé ou
+// échoué) et `credits:adjust` déplacent ou créent de l'argent réel : réservés
+// au SUPERADMIN, et re-vérifiés par chaque route concernée.
 const CAPABILITIES_BY_ROLE: Record<'ADMIN' | 'SUPERADMIN', readonly string[]> = {
   ADMIN: [
     'users:read',
     'users:status:suspend',
     'orders:read',
     'withdrawals:read',
+    'withdrawals:process',
     'audit-log:read',
     'outbox:read',
     'email-queue:read',
     'rate-limits:read',
+    'stats:read',
+    'generations:read',
+    'credits:read',
   ],
   SUPERADMIN: [
     'users:read',
@@ -48,11 +58,17 @@ const CAPABILITIES_BY_ROLE: Record<'ADMIN' | 'SUPERADMIN', readonly string[]> = 
     'users:status:restore',
     'orders:read',
     'withdrawals:read',
+    'withdrawals:process',
+    'withdrawals:settle',
     'withdrawals:cancel',
     'audit-log:read',
     'outbox:read',
     'email-queue:read',
     'rate-limits:read',
+    'stats:read',
+    'generations:read',
+    'credits:read',
+    'credits:adjust',
   ],
 } as const;
 

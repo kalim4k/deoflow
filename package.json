@@ -22,19 +22,13 @@
     "db:migrate:status": "pnpm --filter frontend run db:migrate:status",
     "db:studio": "pnpm --filter frontend run db:studio",
     "db:make-superadmin": "pnpm --filter frontend run db:make-superadmin",
+    "db:grant-credits": "pnpm --filter frontend run db:grant-credits",
     "seed:dev": "pnpm --filter frontend run seed:dev",
+    "seed:admin": "pnpm --filter frontend run seed:admin",
     "smoke:auth": "pnpm --filter frontend run smoke:auth",
     "prepare": "husky"
   },
-  "lint-staged": {
-    "*.{ts,tsx,js,mjs,cjs}": [
-      "prettier --write",
-      "eslint --fix --max-warnings=0 --no-warn-ignored"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write"
-    ]
-  },
+  "$comment_lint-staged": "La configuration vit dans lint-staged.config.mjs — elle a besoin de fonctions pour découper la liste de fichiers sous la limite de ligne de commande Windows.",
   "devDependencies": {
     "@eslint/js": "^9.18.0",
     "eslint": "^9.18.0",

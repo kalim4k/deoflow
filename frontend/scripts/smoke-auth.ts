@@ -17,8 +17,12 @@
 // csrfFromCookies().
 
 import { PrismaClient } from '@prisma/client';
+import { pathToFileURL } from 'node:url';
 
-const BASE_URL = process.env.SMOKE_BASE_URL ?? 'http://localhost:3000';
+// `||`, not `??`: .env.example ships SMOKE_BASE_URL="" and `??` only falls
+// back on null/undefined, so the empty string won through and every fetch
+// targeted a blank origin.
+const BASE_URL = process.env.SMOKE_BASE_URL || 'http://localhost:3001';
 const TEST_EMAIL = `smoke-${Date.now()}@example.test`;
 const TEST_PASSWORD = 'SmokeTestPwd123!';
 
@@ -150,7 +154,11 @@ export async function main(): Promise<number> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL, not `file://${argv[1]}`: on Windows argv[1] is a backslashed
+// drive path (C:\…) which never matches import.meta.url (file:///C:/…), so the
+// naive template made this block dead code — the script exited 0 having run
+// nothing, reporting a pass it never performed.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
     .then((code) => process.exit(code))
     .catch((err) => {

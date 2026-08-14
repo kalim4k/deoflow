@@ -104,6 +104,20 @@ export interface PaymentProvider {
 
   charge(input: ChargeInput): Promise<ChargeResult>;
 
+  /**
+   * Optional — read a charge's current status straight from the provider.
+   *
+   * Only providers WITHOUT webhooks need this. Bictorys pushes its outcome to
+   * `/api/webhooks/bictorys`, so it doesn't implement it. Maketou has no
+   * webhook of any kind — polling this is the only way to learn that a payment
+   * succeeded, which is why it lives on the interface rather than on the one
+   * adapter: the next Togolese provider will very likely be the same.
+   *
+   * Callers must treat the answer as authoritative and grant entitlements
+   * exactly once — see `lib/server/purchases/service.ts`.
+   */
+  pollCharge?(providerChargeId: string): Promise<ChargeStatus>;
+
   /** Optional — providers without payouts simply don't implement it. */
   payout?(input: PayoutInput): Promise<PayoutResult>;
 

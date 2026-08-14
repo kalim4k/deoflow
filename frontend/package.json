@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "next dev --port 3000 --turbopack",
+    "dev": "next dev --port 3001 --turbopack",
     "build": "next build",
     "start": "next start",
     "test": "vitest run",
@@ -17,7 +17,9 @@
     "db:migrate:reset": "prisma migrate reset",
     "db:studio": "prisma studio",
     "db:make-superadmin": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/make-superadmin.ts",
+    "db:grant-credits": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/grant-credits.ts",
     "seed:dev": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-dev.ts",
+    "seed:admin": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-admin-demo.ts",
     "smoke:auth": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke-auth.ts",
     "postinstall": "prisma generate"
   },

@@ -1,193 +1,278 @@
-// Default welcome page for the izi kit starter.
+// Landing publique Deoflow.
 //
-// Replace this file with your real homepage as soon as you're oriented.
-// This file exists so a fresh fork shows something useful at `/` instead of a
-// blank page — it's a server component that reads env at request time and
-// shows which optional providers are configured.
-//
-// Design-swappable: uses minimal Tailwind utilities; rip the JSX out and write
-// your own homepage. The starter ships no UI components by design.
+// Volontairement courte : hero centré → bandeau de formats → trois bénéfices
+// → catalogue → tarifs → un seul CTA. Le brief interdit explicitement « une
+// landing qui explique l'IA en 8 sections » et les hero à six boutons.
+
+import Link from 'next/link';
+import { SiteHeader } from '@/components/marketing/SiteHeader';
+import { SiteFooter } from '@/components/marketing/SiteFooter';
+import { buttonStyles } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Feedback';
+import { ArrowRightIcon, CheckIcon, ImageIcon, StarIcon, VideoIcon } from '@/components/icons';
+import { AI_MODELS, MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
+import { startingPrice } from '@/lib/deoflow/pricing';
+import { minBillableSeconds } from '@/lib/deoflow/capabilities';
+import { CREDIT_PACKS, pricePerCredit } from '@/lib/deoflow/packs';
+import { modelSamples } from '@/lib/deoflow/placeholder';
+import { ModelBanner } from '@/components/app/ModelBanner';
+import type { AiModel } from '@/lib/deoflow/types';
+import { formatAmount } from '@/lib/format';
 
 export const runtime = 'nodejs';
 
-function ConfigRow({ label, ok, hint }: { label: string; ok: boolean; hint: string }) {
-  return (
-    <li className="flex flex-wrap items-center gap-2 py-1.5">
-      <span aria-hidden className={ok ? 'text-emerald-600' : 'text-amber-500'}>
-        {ok ? '✅' : '⚠️ '}
-      </span>
-      <span className="font-mono text-sm">{label}</span>
-      <span className="text-xs text-gray-500">— {hint}</span>
-    </li>
-  );
-}
+// ⚠️ CHIFFRES DE DÉMONSTRATION — à remplacer avant toute mise en ligne.
+// Deoflow n'a pas encore d'utilisateurs : afficher une audience ou une note
+// inventées relève de la publicité trompeuse, et c'est le genre de détail qui
+// se retourne contre une marque naissante. Le jour où ces nombres existent
+// vraiment, ils doivent venir d'une route d'agrégation, pas d'une constante.
+const SOCIAL_PROOF = {
+  users: '500+',
+  rating: '4,8',
+};
+
+// Formats natifs de sortie. Ce n'est pas un mur de logos « ils nous font
+// confiance » — ce serait faux — mais une information vérifiable : le ratio
+// que chaque plateforme attend, et que le catalogue sait produire.
+const PLATFORMS: Array<{ name: string; ratio: string; kind: 'image' | 'video' }> = [
+  { name: 'TikTok', ratio: '9:16', kind: 'video' },
+  { name: 'Instagram Reels', ratio: '9:16', kind: 'video' },
+  { name: 'YouTube Shorts', ratio: '9:16', kind: 'video' },
+  { name: 'Snapchat', ratio: '9:16', kind: 'video' },
+  { name: 'Facebook Reels', ratio: '9:16', kind: 'video' },
+  { name: 'Statut WhatsApp', ratio: '9:16', kind: 'image' },
+  { name: 'Post Instagram', ratio: '1:1', kind: 'image' },
+  { name: 'Miniature YouTube', ratio: '16:9', kind: 'image' },
+];
+
+const BENEFITS = [
+  {
+    title: 'Un seul compte, tous les modèles',
+    body: 'Nano Banana 2, GPT Image 2, Veo 3.1, Kling, Seedance — les modèles qui comptent, dans la même interface. Plus besoin de jongler entre cinq outils.',
+  },
+  {
+    title: 'Payable en Mobile Money',
+    body: 'Vous rechargez depuis votre téléphone, sans carte bancaire, avec le montant que vous avez. Les crédits n’expirent pas.',
+  },
+  {
+    title: 'Vos créations restent à vous',
+    body: 'Chaque génération part dans votre galerie avec son prompt. Vous la retéléchargez ou vous la relancez quand vous voulez, sans filigrane.',
+  },
+];
 
 export default function Home() {
-  const env = process.env;
-
-  const required = [
-    { label: 'DATABASE_URL', ok: !!env.DATABASE_URL, hint: 'Postgres (required)' },
-    { label: 'JWT_SECRET', ok: !!env.JWT_SECRET, hint: 'Auth signing key (required)' },
-  ];
-
-  const recommended = [
-    { label: 'ENCRYPTION_KEY', ok: !!env.ENCRYPTION_KEY, hint: 'AES-256-GCM (recommended)' },
-    { label: 'CRON_SECRET', ok: !!env.CRON_SECRET, hint: 'Vercel Cron Bearer (recommended)' },
-    { label: 'DIRECT_URL', ok: !!env.DIRECT_URL, hint: 'For prisma migrate deploy' },
-  ];
-
-  const optional = [
-    {
-      label: 'UPSTASH_REDIS_REST_URL',
-      ok: !!env.UPSTASH_REDIS_REST_URL,
-      hint: 'Redis (rate limit, queue, lockout)',
-    },
-    {
-      label: 'GOOGLE_CLIENT_ID',
-      ok: !!env.GOOGLE_CLIENT_ID,
-      hint: 'Sign in with Google (OAuth)',
-    },
-    { label: 'RESEND_API_KEY', ok: !!env.RESEND_API_KEY, hint: 'Email sender' },
-    { label: 'EMAIL_FROM', ok: !!env.EMAIL_FROM, hint: 'Verified sender address' },
-    {
-      label: 'CLOUDINARY_CLOUD_NAME',
-      ok: !!env.CLOUDINARY_CLOUD_NAME,
-      hint: 'Cloudinary file / media storage',
-    },
-    { label: 'BICTORYS_API_KEY', ok: !!env.BICTORYS_API_KEY, hint: 'Mobile money payments' },
-    { label: 'SENTRY_DSN', ok: !!env.SENTRY_DSN, hint: 'Error reporting + traces' },
-  ];
+  // Trois modèles mis en avant : un image, deux vidéo — assez pour montrer
+  // l'étendue du catalogue, pas assez pour noyer la page.
+  const FEATURED_SLUGS = ['nano-banana-2', 'veo-3-1', 'kling-2-6'];
+  const featured: AiModel[] = AI_MODELS.filter((m) => FEATURED_SLUGS.includes(m.slug));
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12 font-sans text-gray-900">
-      <header>
-        <h1 className="text-3xl font-bold tracking-tight">izi kit</h1>
-        <p className="mt-2 text-gray-600">
-          Headless Next.js 16 starter — auth, payments, admin, webhooks, cron.
-          <br />
-          You&rsquo;re seeing this default page because{' '}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-sm">
-            frontend/src/app/page.tsx
-          </code>{' '}
-          hasn&rsquo;t been replaced yet.
-        </p>
-      </header>
+    <>
+      <SiteHeader />
 
-      {/* ─── Beginner: what to type next ───────────────────────────────── */}
-      <section className="mt-10 rounded-lg border border-emerald-200 bg-emerald-50 p-5">
-        <h2 className="text-lg font-semibold text-emerald-900">
-          👋 New here? Open this project in Claude Code and type:
-        </h2>
-        <pre className="mt-3 overflow-x-auto rounded bg-white p-3 text-sm">/setup-kit</pre>
-        <p className="mt-3 text-sm text-emerald-900">
-          The <code>/setup-kit</code> skill audits your environment, installs what it can (pnpm via
-          Corepack, secrets), and walks you through plugging a <strong>Neon Postgres</strong>{' '}
-          connection string — the kit is tuned for Neon&rsquo;s serverless behavior (other Postgres
-          providers work but need user-side tuning). Then just{' '}
-          <strong>describe what you want to build to Claude</strong> (in French or English). The 40
-          routes (auth, payments, admin, webhooks, cron, uploads) are already wired — you only talk
-          about your product, not the plumbing. See <code>WORKFLOW.md</code> for the full
-          vibe-coding flow.
-        </p>
-      </section>
+      {/* ── Hero ──────────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-4 pt-14 pb-14 sm:px-6 sm:pt-20">
+        {/* Le discours d'abord, centré et resserré : une seule colonne de
+            lecture, un seul CTA. Les aperçus viennent après, en preuve. */}
+        <div className="flex flex-col items-center gap-6 text-center">
+          <Badge tone="ember" className="rise-in">
+            Mobile Money · sans carte bancaire
+          </Badge>
 
-      {/* ─── Live backend probes ──────────────────────────────────────── */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold">Backend status</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Live JSON probes — open these in a new tab to confirm everything is up.
-        </p>
-        <ul className="mt-3 space-y-1">
-          <li>
-            <a
-              href="/api/health"
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-600 underline"
-            >
-              /api/health
-            </a>{' '}
-            <span className="text-xs text-gray-500">— liveness (always responds)</span>
-          </li>
-          <li>
-            <a
-              href="/api/readyz"
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-600 underline"
-            >
-              /api/readyz
-            </a>{' '}
-            <span className="text-xs text-gray-500">
-              — readiness (DB + Redis probes, 503 if either is down)
+          <h1
+            className="rise-in max-w-3xl text-4xl leading-[1.05] sm:text-5xl lg:text-6xl"
+            style={{ animationDelay: '70ms' }}
+          >
+            Votre influenceuse IA,
+            <br />
+            générée ce soir.
+          </h1>
+
+          <p className="rise-in max-w-xl text-lg text-ink-500" style={{ animationDelay: '140ms' }}>
+            Images et vidéos avec les meilleurs modèles du marché, dans une seule interface, en
+            français. Vous rechargez en mobile money, vous générez, vous téléchargez.
+          </p>
+
+          <div
+            className="rise-in flex flex-col items-center gap-3"
+            style={{ animationDelay: '210ms' }}
+          >
+            <Link href="/signup" className={buttonStyles('primary', 'lg')}>
+              Créer mon compte
+              <ArrowRightIcon className="size-4" />
+            </Link>
+            <span className="text-sm text-ink-300">
+              À partir de {formatAmount(5000, 'XOF')} les 50 crédits
             </span>
-          </li>
+          </div>
+
+          {/* Preuve sociale — voir l'avertissement sur SOCIAL_PROOF. */}
+          <div
+            className="rise-in flex flex-wrap items-center justify-center gap-x-4 gap-y-2"
+            style={{ animationDelay: '280ms' }}
+          >
+            <p className="flex flex-wrap items-center justify-center gap-x-2 text-sm text-ink-500">
+              <span className="flex text-ember-500">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <StarIcon key={i} className="size-4" />
+                ))}
+              </span>
+              <span>
+                <strong className="font-medium text-ink-900">{SOCIAL_PROOF.rating}/5</strong> —{' '}
+                {SOCIAL_PROOF.users} créateurs déjà inscrits
+              </span>
+            </p>
+          </div>
+        </div>
+
+        {/* Aperçus : des rendus, pas une illustration décorative. */}
+        <ul className="mt-12 grid grid-cols-3 gap-3 sm:mt-14 sm:gap-4" aria-hidden="true">
+          {modelSamples('hero-deoflow', 'image', 3).map((src, i) => (
+            <li key={src} className="rise-in" style={{ animationDelay: `${360 + i * 90}ms` }}>
+              <img
+                src={src}
+                alt=""
+                className={
+                  i === 1
+                    ? 'aspect-[3/4] w-full rounded-2xl border border-line object-cover shadow-[0_8px_28px_rgba(11,11,12,0.08)] sm:-translate-y-5'
+                    : 'aspect-[3/4] w-full rounded-2xl border border-line object-cover'
+                }
+              />
+            </li>
+          ))}
         </ul>
       </section>
 
-      {/* ─── Provider configuration ───────────────────────────────────── */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold">Provider configuration</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Read at request time from <code>process.env</code>. Optional providers are inert when
-          absent — the corresponding routes 404 silently and the rest of the app keeps working.
-        </p>
+      {/* ── Formats de sortie (bandeau défilant) ──────────────────────── */}
+      <section className="border-y border-line bg-surface py-6">
+        <h2 className="mb-4 text-center text-xs font-medium text-ink-300">
+          Des formats prêts à publier, sans recadrage
+        </h2>
 
-        <h3 className="mt-5 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Required (app refuses to boot without these)
-        </h3>
-        <ul>
-          {required.map((row) => (
-            <ConfigRow key={row.label} {...row} />
+        <div className="marquee">
+          {/* La liste est doublée pour que la boucle soit sans couture ; le
+              second exemplaire est masqué aux lecteurs d'écran, sinon chaque
+              plateforme serait annoncée deux fois. */}
+          <ul className="marquee-track gap-3 px-1.5" aria-label="Formats de sortie disponibles">
+            {[...PLATFORMS, ...PLATFORMS].map((platform, i) => {
+              const Icon = platform.kind === 'video' ? VideoIcon : ImageIcon;
+              return (
+                <li
+                  key={`${platform.name}-${i}`}
+                  aria-hidden={i >= PLATFORMS.length ? true : undefined}
+                  className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-canvas px-4 py-2 text-sm whitespace-nowrap text-ink-700"
+                >
+                  <Icon className="size-4 text-ink-300" />
+                  {platform.name}
+                  <span className="font-display text-xs text-ink-300">{platform.ratio}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      </section>
+
+      {/* ── Bénéfices ─────────────────────────────────────────────────── */}
+      {/* Pas de bordure haute : celle du bandeau ci-dessus fait déjà la
+          séparation, deux filets collés donneraient un trait de 2 px. */}
+      <section className="bg-surface">
+        <div className="mx-auto grid max-w-5xl gap-8 px-4 py-16 sm:grid-cols-3 sm:px-6">
+          {BENEFITS.map((b) => (
+            <div key={b.title} className="flex flex-col gap-2">
+              <h2 className="font-display text-lg">{b.title}</h2>
+              <p className="text-sm text-ink-500">{b.body}</p>
+            </div>
           ))}
-        </ul>
+        </div>
+      </section>
 
-        <h3 className="mt-5 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Recommended (app boots, but breaks at first use)
-        </h3>
-        <ul>
-          {recommended.map((row) => (
-            <ConfigRow key={row.label} {...row} />
-          ))}
-        </ul>
+      {/* ── Catalogue ─────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <h2 className="text-2xl sm:text-3xl">Les modèles disponibles</h2>
+          <Link
+            href="/models"
+            className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-ink-500 transition-colors duration-200 hover:text-ink-900"
+          >
+            Voir le catalogue complet
+            <ArrowRightIcon className="size-4" />
+          </Link>
+        </div>
 
-        <h3 className="mt-5 text-sm font-semibold uppercase tracking-wide text-gray-500">
-          Optional providers
-        </h3>
-        <ul>
-          {optional.map((row) => (
-            <ConfigRow key={row.label} {...row} />
+        <ul className="grid gap-4 sm:grid-cols-3">
+          {featured.map((model) => (
+            <li key={model.slug} className="card overflow-hidden">
+              <ModelBanner model={model} />
+              <div className="flex flex-col gap-2 p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-display text-base">{model.name}</h3>
+                  <Badge tone={model.trait === 'quality' ? 'ink' : 'neutral'}>
+                    {MODEL_TRAIT_LABELS[model.trait]}
+                  </Badge>
+                </div>
+                <p className="text-sm text-ink-500">{model.tagline}</p>
+                <p className="text-sm text-ink-900">
+                  {model.kind === 'video' && 'À partir de '}
+                  {startingPrice(model.slug, minBillableSeconds(model.slug)) ?? 0} crédits
+                  <span className="text-ink-300">{model.kind === 'video' ? '' : ' / image'}</span>
+                </p>
+              </div>
+            </li>
           ))}
         </ul>
       </section>
 
-      {/* ─── What's shipped ───────────────────────────────────────────── */}
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold">What this starter ships</h2>
-        <ul className="mt-3 list-inside list-disc space-y-1 text-sm">
-          <li>
-            API routes under <code>/api/*</code> — auth, OAuth, admin, payments, uploads, webhooks,
-            5 cron handlers
-          </li>
-          <li>Prisma schema + versioned migrations (Postgres / Neon)</li>
-          <li>Vitest unit test suite covering the protected libs</li>
-          <li>CI pipeline: format / lint / typecheck / test / build / audit</li>
-          <li>
-            Cloud-only by design — bring your own Postgres (Neon free tier), no local containers
-          </li>
-        </ul>
-        <p className="mt-3 text-sm text-gray-600">
-          Full architecture overview in{' '}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5">CLAUDE.md</code>; public surface in{' '}
-          <code className="rounded bg-gray-100 px-1.5 py-0.5">README.md</code>.
-        </p>
+      {/* ── Tarifs ────────────────────────────────────────────────────── */}
+      <section className="border-t border-line bg-surface">
+        <div className="mx-auto max-w-5xl px-4 py-16 sm:px-6">
+          <h2 className="mb-2 text-2xl sm:text-3xl">Vous payez ce que vous consommez</h2>
+          <p className="mb-8 text-ink-500">
+            Pas d&apos;abonnement. Vous achetez des crédits, ils n&apos;expirent pas.
+          </p>
+
+          <ul className="grid gap-4 sm:grid-cols-3">
+            {CREDIT_PACKS.map((pack) => (
+              <li
+                key={pack.id}
+                className={pack.badge === 'Populaire' ? 'card border-ink-900 p-6' : 'card p-6'}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-display text-base">{pack.name}</h3>
+                  {pack.badge ? <Badge tone="ember">{pack.badge}</Badge> : null}
+                </div>
+                <p className="mt-4 flex items-baseline gap-2">
+                  <span className="font-display text-3xl">
+                    {formatAmount(pack.priceFcfa, 'XOF')}
+                  </span>
+                </p>
+                <p className="mt-1 text-sm text-ink-500">
+                  {pack.credits} crédits — {pricePerCredit(pack)} FCFA le crédit
+                </p>
+                <p className="mt-4 flex items-start gap-2 text-sm text-ink-500">
+                  <CheckIcon className="mt-0.5 size-4 text-gain-600" />
+                  {Math.floor(pack.credits / 24)} images, ou {Math.floor(pack.credits / 165)} clips
+                  Kling de 5 s
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
-      <footer className="mt-12 border-t border-gray-200 pt-6 text-xs text-gray-500">
-        Replace this page in{' '}
-        <code className="rounded bg-gray-100 px-1.5 py-0.5">frontend/src/app/page.tsx</code> when
-        you&rsquo;re ready.
-      </footer>
-    </main>
+      {/* ── CTA final ─────────────────────────────────────────────────── */}
+      <section className="mx-auto max-w-5xl px-4 py-20 text-center sm:px-6">
+        <h2 className="mx-auto max-w-xl text-3xl sm:text-4xl">
+          Le prompt est déjà dans votre tête. Passez à l&apos;image.
+        </h2>
+        <div className="mt-8 flex justify-center">
+          <Link href="/signup" className={buttonStyles('primary', 'lg')}>
+            Créer mon compte
+            <ArrowRightIcon className="size-4" />
+          </Link>
+        </div>
+      </section>
+
+      <SiteFooter />
+    </>
   );
 }

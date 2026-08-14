@@ -23,6 +23,9 @@ const USER_SELECT = {
   status: true,
   emailVerifiedAt: true,
   createdAt: true,
+  // Même ajout que sur la liste : sans le solde, l'ajustement de crédits se
+  // ferait à l'aveugle.
+  credits: true,
 } as const satisfies Prisma.UserSelect;
 
 export async function GET(

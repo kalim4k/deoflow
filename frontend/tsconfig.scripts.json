@@ -1,0 +1,22 @@
+// Configuration réservée aux scripts de maintenance lancés par `tsx`
+// (hors du bundler Next.js).
+//
+// `server-only` lève une exception dès l'import : c'est sa raison d'être, il
+// interdit qu'un module serveur atterrisse dans un bundle client. Mais un
+// script Node n'est pas un bundle client, et il est légitime qu'il importe
+// `lib/server/*` — sans cette redirection vers le stub vide du paquet, tout
+// script touchant aux crédits ou à l'authentification meurt à l'import.
+//
+// La redirection ne vaut QUE pour les scripts : `tsconfig.json` reste intact,
+// donc la garde continue de protéger l'application. Vitest fait déjà la même
+// substitution de son côté (voir `vitest.config.ts`).
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"],
+      "server-only": ["./node_modules/server-only/empty.js"]
+    }
+  },
+  "include": ["scripts/**/*", "src/**/*"]
+}

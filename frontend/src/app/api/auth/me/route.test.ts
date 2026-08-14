@@ -55,7 +55,33 @@ describe('GET /api/auth/me', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
       user: { sub: 'u1', email: 'a@b.com' },
+      // La charge simulée ci-dessus n'a pas de colonne `credits` : la route
+      // doit retomber sur 0 plutôt que renvoyer `undefined`, qui disparaîtrait
+      // du JSON et laisserait le navigateur sans solde.
+      credits: 0,
     });
+  });
+
+  it('Test 1b: renvoie le solde avec le profil, en un seul appel', async () => {
+    // Le solde voyage ici pour éviter un appel réseau séparé — voir
+    // `lib/deoflow/bootstrap.test.ts` pour le budget que ça protège.
+    vi.mocked(verifyToken).mockResolvedValue({
+      sub: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+    });
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u1',
+      email: 'a@b.com',
+      tokenVersion: 0,
+      credits: 437,
+    } as never);
+
+    const res = await GET(makeReq({ bearer: 'valid-access-token' }));
+    const body = await res.json();
+    expect(body.credits).toBe(437);
+    // Hors de `user` : cet objet reste la forme de la trousse de départ.
+    expect(body.user.credits).toBeUndefined();
   });
 
   it('Test 2: no cookie + no bearer — 401 missing token', async () => {

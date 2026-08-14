@@ -68,12 +68,16 @@ describe('GET /api/admin/me [Wave 1]', () => {
       'users:status:suspend',
       'orders:read',
       'withdrawals:read',
+      'withdrawals:process',
       'audit-log:read',
       'outbox:read',
       'email-queue:read',
       'rate-limits:read',
+      'stats:read',
+      'generations:read',
+      'credits:read',
     ]);
-    expect(body.can).toHaveLength(8);
+    expect(body.can).toHaveLength(12);
   });
 
   it('GET returns broader capability list for SUPERADMIN including users:role and withdrawals:cancel', async () => {
@@ -89,10 +93,10 @@ describe('GET /api/admin/me [Wave 1]', () => {
     expect(body.can).toContain('users:role');
     expect(body.can).toContain('withdrawals:cancel');
     expect(body.can).toContain('users:status:restore');
-    expect(body.can).toHaveLength(11);
+    expect(body.can).toHaveLength(17);
   });
 
-  it('SUPERADMIN list is the exact 11-item set required by D-ADMIN-04', async () => {
+  it('SUPERADMIN list is the exact 17-item set required by D-ADMIN-04', async () => {
     mockRequireAdmin.mockResolvedValueOnce(superadminCtx);
     const res = await GET(makeGet());
     const body = await res.json();
@@ -103,11 +107,17 @@ describe('GET /api/admin/me [Wave 1]', () => {
       'users:status:restore',
       'orders:read',
       'withdrawals:read',
+      'withdrawals:process',
+      'withdrawals:settle',
       'withdrawals:cancel',
       'audit-log:read',
       'outbox:read',
       'email-queue:read',
       'rate-limits:read',
+      'stats:read',
+      'generations:read',
+      'credits:read',
+      'credits:adjust',
     ]);
   });
 
@@ -154,6 +164,9 @@ describe('GET /api/admin/me [Wave 1]', () => {
     expect(body.can).not.toContain('users:role');
     expect(body.can).not.toContain('users:status:restore');
     expect(body.can).not.toContain('withdrawals:cancel');
+    // Les deux capacités qui déplacent ou créent de l'argent réel.
+    expect(body.can).not.toContain('withdrawals:settle');
+    expect(body.can).not.toContain('credits:adjust');
   });
 });
 
@@ -177,5 +190,7 @@ describe('source invariants', () => {
     expect(occurrences('users:role')).toBe(1);
     expect(occurrences('withdrawals:cancel')).toBe(1);
     expect(occurrences('users:status:restore')).toBe(1);
+    expect(occurrences('withdrawals:settle')).toBe(1);
+    expect(occurrences('credits:adjust')).toBe(1);
   });
 });
