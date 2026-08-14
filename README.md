@@ -121,14 +121,20 @@ Les fichiers uploadés renvoient un `secure_url` Cloudinary servi directement pa
 |---|---|---|
 | POST | `/api/webhooks/bictorys` | HMAC provider + replay window 60s |
 
-### Handlers cron — 5 routes (toutes `Authorization: Bearer ${CRON_SECRET}`)
-| Path | Schedule (`vercel.json`) |
-|---|---|
-| `/api/cron/outbox-drain` | toutes les minutes |
-| `/api/cron/email-queue-drain` | toutes les minutes |
-| `/api/cron/verification-cleanup` | toutes les heures |
-| `/api/cron/order-expiration` | toutes les 5 min |
-| `/api/cron/webhook-log-purge` | quotidien |
+### Handlers cron — 7 routes (toutes `Authorization: Bearer ${CRON_SECRET}`, `GET` et `POST`)
+Inventaire : [`frontend/cron-schedule.json`](frontend/cron-schedule.json). Procédure : [CRON.md](CRON.md).
+
+| Path | Schedule | Déclenché par |
+|---|---|---|
+| `/api/cron/outbox-drain` | toutes les minutes | cron-job.org |
+| `/api/cron/email-queue-drain` | toutes les minutes | cron-job.org |
+| `/api/cron/purchase-reconcile` | toutes les 5 min | cron-job.org |
+| `/api/cron/order-expiration` | toutes les 5 min | cron-job.org |
+| `/api/cron/verification-cleanup` | toutes les heures | cron-job.org |
+| `/api/cron/webhook-log-purge` | quotidien | Vercel |
+| `/api/cron/email-job-purge` | quotidien | Vercel |
+
+Le plan Vercel Hobby n'accepte que des cadences quotidiennes et refuse le déploiement entier si `vercel.json` en déclare une autre — d'où le partage.
 
 ### Admin (`/api/admin/*`) — 12 routes
 | Méthode | Path | Auth |
@@ -170,7 +176,7 @@ Le smoke script demande `DATABASE_URL` et `JWT_SECRET` set (il lit le code de v�
 
 1. Push le repo vers un projet Vercel pointé sur `frontend/` comme root directory (le projet est un workspace pnpm ; Vercel auto-détecte via `pnpm-workspace.yaml`).
 2. Map chaque variable d'environnement requise au boot dans les Vercel project settings (Production + Preview + Development).
-3. [`frontend/vercel.json`](frontend/vercel.json) déclare les schedules cron — Vercel les enregistre automatiquement au deploy. Aucun setup additionnel.
+3. [`frontend/vercel.json`](frontend/vercel.json) déclare les 2 tâches cron quotidiennes — Vercel les enregistre automatiquement au deploy. **Les 5 tâches plus fréquentes sont à créer une fois sur cron-job.org** : le plan Hobby ne les accepte pas. Procédure complète dans [CRON.md](CRON.md) ; sans elles, les crédits payés ne sont jamais livrés et aucun e-mail ne part.
 4. L'upload des source-maps Sentry tourne dans `next build` si `SENTRY_ORG` / `SENTRY_PROJECT` / `SENTRY_AUTH_TOKEN` sont définis comme build-time env vars.
 5. Le standalone output est auto-détecté (`next.config.ts` l'active) ; aucune config supplémentaire.
 6. Détails init Sentry / OTel dans [`frontend/instrumentation.ts`](frontend/instrumentation.ts) et les fichiers `sentry.*.config.ts` — lis-les pour les détails d'ordre des hooks.
@@ -207,7 +213,8 @@ izikit/
 ├── frontend/                    L'app Next.js 16 (full-stack)
 │   ├── prisma/                  schema.prisma + migrations
 │   ├── scripts/                 make-superadmin.ts, seed-dev.ts, smoke-auth.ts (via tsx)
-│   ├── vercel.json              schedules cron (5 entrées)
+│   ├── cron-schedule.json       inventaire des 7 tâches planifiées (source de vérité)
+│   ├── vercel.json              les 2 tâches quotidiennes que Vercel Hobby accepte
 │   ├── .env.example             référence env
 │   └── src/
 │       ├── app/api/             route handlers

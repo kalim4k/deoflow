@@ -1,0 +1,48 @@
+{
+  "$comment": "Source de vérité des tâches planifiées. vercel.json ne déclare QUE celles dont le trigger vaut 'vercel' — le plan Hobby refuse toute cadence plus fréquente que quotidienne. Les autres sont déclenchées en HTTP depuis cron-job.org. Procédure complète : CRON.md à la racine.",
+  "vercelPlan": "hobby",
+  "jobs": [
+    {
+      "path": "/api/cron/outbox-drain",
+      "schedule": "*/1 * * * *",
+      "trigger": "external",
+      "why": "Envoie les effets de bord écrits par les webhooks (e-mails, notifications). À l'arrêt, ils s'empilent en base sans jamais partir."
+    },
+    {
+      "path": "/api/cron/email-queue-drain",
+      "schedule": "*/1 * * * *",
+      "trigger": "external",
+      "why": "Poste les e-mails en file, dont les codes de vérification d'inscription. À l'arrêt, personne ne peut finir de créer un compte."
+    },
+    {
+      "path": "/api/cron/purchase-reconcile",
+      "schedule": "*/5 * * * *",
+      "trigger": "external",
+      "why": "MakeTou n'a aucun webhook : c'est la SEULE chose qui livre les crédits payés. À l'arrêt, un acheteur paie et n'est jamais crédité, sans la moindre erreur nulle part."
+    },
+    {
+      "path": "/api/cron/order-expiration",
+      "schedule": "*/5 * * * *",
+      "trigger": "external",
+      "why": "Fait expirer les commandes restées en attente. À l'arrêt, elles restent PENDING indéfiniment et faussent les agrégats du back-office."
+    },
+    {
+      "path": "/api/cron/verification-cleanup",
+      "schedule": "0 * * * *",
+      "trigger": "external",
+      "why": "Purge les codes de vérification périmés. À l'arrêt, un code expiré reste en base — nuisance, pas panne."
+    },
+    {
+      "path": "/api/cron/webhook-log-purge",
+      "schedule": "0 0 * * *",
+      "trigger": "vercel",
+      "why": "Purge les WebhookLog anciens. Quotidien, donc accepté par le plan Hobby."
+    },
+    {
+      "path": "/api/cron/email-job-purge",
+      "schedule": "0 0 * * *",
+      "trigger": "vercel",
+      "why": "Purge les EmailJob SENT au-delà de EMAIL_JOB_RETENTION_DAYS. Quotidien, donc accepté par le plan Hobby."
+    }
+  ]
+}

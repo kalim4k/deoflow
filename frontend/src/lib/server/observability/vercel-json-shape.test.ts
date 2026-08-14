@@ -1,13 +1,17 @@
 // frontend/src/lib/server/observability/vercel-json-shape.test.ts — Phase 5 D-20.
 //
-// Tripwire: verifies vercel.json declares all 6 cron schedules with valid
-// cron-format strings and paths that correspond to actual route.ts files.
-// (5 Phase-5 canonical + 1 post-audit email-job-purge.)
+// Tripwire d'inventaire : garantit que les 7 tâches planifiées canoniques
+// existent toujours, avec une cadence valide et un route.ts en face.
 //
-// Wave 0 status: RED until Wave 1 plan 05-08 ships frontend/vercel.json.
-// Once GREEN, this test guards against route-rename / schedule-drift
-// regressions where a developer renames a cron route file but forgets
-// vercel.json (or vice versa).
+// L'inventaire a déménagé de `vercel.json` vers `cron-schedule.json` : le plan
+// Vercel Hobby n'accepte que des cadences quotidiennes, donc `vercel.json` ne
+// déclare plus que 2 des 7 tâches — les 5 autres sont appelées en HTTP depuis
+// cron-job.org (voir CRON.md). Continuer à compter les entrées de `vercel.json`
+// laisserait 5 tâches sans aucune surveillance.
+//
+// Ce test garde contre la dérive route-renommée / manifeste-oublié. Le partage
+// vercel↔externe et les verbes HTTP sont couverts par
+// src/lib/server/cron/vercel-verb.test.ts.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,55 +22,59 @@ import fg from 'fast-glob';
 const here = dirname(fileURLToPath(import.meta.url));
 const FRONTEND_ROOT = resolve(here, '../../../../');
 const VERCEL_JSON = resolve(FRONTEND_ROOT, 'vercel.json');
+const CRON_MANIFEST = resolve(FRONTEND_ROOT, 'cron-schedule.json');
 const APP_API_CRON = resolve(FRONTEND_ROOT, 'src/app/api/cron');
 
 const PATH_RE = /^\/api\/cron\/[a-z][a-z0-9-]*$/;
 // Permissive cron-format: 5 fields, each containing only digits, *, /, ,, -, or whitespace
 const SCHED_RE = /^[\d*/,-]+\s+[\d*/,-]+\s+[\d*/,-]+\s+[\d*/,-]+\s+[\d*/,-]+$/;
 
-interface VercelConfig {
-  crons?: Array<{ path: string; schedule: string }>;
+interface Job {
+  path: string;
+  schedule: string;
+  trigger: 'vercel' | 'external';
 }
 
-describe('vercel.json schema (CRON-07, D-20)', () => {
-  it('frontend/vercel.json exists', () => {
+const manifest = JSON.parse(readFileSync(CRON_MANIFEST, 'utf8')) as {
+  vercelPlan: string;
+  jobs: Job[];
+};
+
+describe('inventaire des tâches planifiées (CRON-07, D-20)', () => {
+  it('frontend/vercel.json existe', () => {
     expect(existsSync(VERCEL_JSON)).toBe(true);
   });
 
-  it('declares exactly 7 cron schedules', () => {
-    if (!existsSync(VERCEL_JSON)) return; // skip silently when RED-by-design
-    const cfg = JSON.parse(readFileSync(VERCEL_JSON, 'utf8')) as VercelConfig;
-    expect(cfg.crons).toBeDefined();
-    expect(cfg.crons!.length).toBe(7);
+  it('frontend/cron-schedule.json existe', () => {
+    expect(existsSync(CRON_MANIFEST)).toBe(true);
   });
 
-  it('every cron path matches /^\\/api\\/cron\\/[a-z-]+$/ and schedule is valid 5-field cron', () => {
-    if (!existsSync(VERCEL_JSON)) return;
-    const cfg = JSON.parse(readFileSync(VERCEL_JSON, 'utf8')) as VercelConfig;
-    for (const c of cfg.crons ?? []) {
-      expect(c.path).toMatch(PATH_RE);
-      expect(c.schedule).toMatch(SCHED_RE);
+  it('le manifeste déclare exactement 7 tâches', () => {
+    expect(manifest.jobs.length).toBe(7);
+  });
+
+  it('chaque chemin respecte /^\\/api\\/cron\\/[a-z-]+$/ et chaque cadence est un cron 5 champs', () => {
+    for (const job of manifest.jobs) {
+      expect(job.path).toMatch(PATH_RE);
+      expect(job.schedule).toMatch(SCHED_RE);
+      expect(['vercel', 'external']).toContain(job.trigger);
     }
   });
 
-  it('every cron path corresponds to an existing app/api/cron/<name>/route.ts file', async () => {
-    if (!existsSync(VERCEL_JSON)) return;
-    const cfg = JSON.parse(readFileSync(VERCEL_JSON, 'utf8')) as VercelConfig;
+  it('chaque chemin correspond à un app/api/cron/<name>/route.ts existant', async () => {
     const routeFiles = await fg('*/route.ts', { cwd: APP_API_CRON, onlyFiles: true });
     const routeNames = new Set(routeFiles.map((f) => f.split('/')[0]));
-    for (const c of cfg.crons ?? []) {
-      const name = c.path.replace('/api/cron/', '');
+    for (const job of manifest.jobs) {
+      const name = job.path.replace('/api/cron/', '');
       expect(
         routeNames.has(name),
-        `vercel.json declares /api/cron/${name} but no route.ts found`,
+        `le manifeste déclare /api/cron/${name} mais aucun route.ts n'existe`,
       ).toBe(true);
     }
   });
 
-  it('declares schedules for the 7 canonical crons (Phase 5 + post-audit + Maketou)', () => {
-    if (!existsSync(VERCEL_JSON)) return;
-    const cfg = JSON.parse(readFileSync(VERCEL_JSON, 'utf8')) as VercelConfig;
-    const paths = (cfg.crons ?? []).map((c) => c.path).sort();
+  it('déclare les 7 tâches canoniques (Phase 5 + post-audit + Maketou)', () => {
+    const paths = manifest.jobs.map((j) => j.path).sort();
     expect(paths).toEqual([
       '/api/cron/email-job-purge',
       '/api/cron/email-queue-drain',
@@ -74,7 +82,7 @@ describe('vercel.json schema (CRON-07, D-20)', () => {
       '/api/cron/outbox-drain',
       // Maketou n'a pas de webhook : sans ce cron, un acheteur qui confirme son
       // paiement après avoir quitté l'onglet n'est jamais crédité. Le retirer
-      // de vercel.json ne casse rien de visible — c'est bien le problème.
+      // du manifeste ne casse rien de visible — c'est bien le problème.
       '/api/cron/purchase-reconcile',
       '/api/cron/verification-cleanup',
       '/api/cron/webhook-log-purge',
