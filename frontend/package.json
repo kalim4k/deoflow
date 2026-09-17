@@ -18,6 +18,7 @@
     "db:studio": "prisma studio",
     "db:make-superadmin": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/make-superadmin.ts",
     "db:grant-credits": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/grant-credits.ts",
+    "db:recover-generations": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/recover-empty-result-generations.ts",
     "seed:dev": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-dev.ts",
     "seed:admin": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-admin-demo.ts",
     "smoke:auth": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke-auth.ts",

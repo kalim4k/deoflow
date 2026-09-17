@@ -352,6 +352,52 @@ describe('getTask', () => {
     expect(state).toMatchObject({ status: 'SUCCEEDED', urls: ['https://cdn/v.mp4'] });
   });
 
+  // La forme RÉELLE de `/veo/record-info` : les URLs sont dans un objet
+  // `response` imbriqué. Les lire à plat sur `data` rendait une liste vide
+  // pour une vidéo pourtant produite et facturée — le créateur voyait une
+  // erreur et la vidéo n'arrivait jamais dans sa galerie.
+  it('lit les URLs Veo dans l’objet `response` imbriqué', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockJson({
+        code: 200,
+        data: {
+          taskId: 't',
+          successFlag: 1,
+          errorCode: null,
+          errorMessage: '',
+          response: {
+            taskId: 't',
+            originUrls: ['https://cdn/origin.mp4'],
+            resultUrls: ['https://cdn/result.mp4'],
+            resolution: '720p',
+          },
+        },
+      }),
+    );
+    expect(await getTask(provider, { taskId: 't', family: 'veo' })).toMatchObject({
+      status: 'SUCCEEDED',
+      urls: ['https://cdn/result.mp4'],
+    });
+  });
+
+  it('se rabat sur originUrls quand resultUrls est vide', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockJson({
+        code: 200,
+        data: {
+          successFlag: 1,
+          response: { resultUrls: [], originUrls: ['https://cdn/origin.mp4'] },
+        },
+      }),
+    );
+    expect(await getTask(provider, { taskId: 't', family: 'veo' })).toMatchObject({
+      status: 'SUCCEEDED',
+      urls: ['https://cdn/origin.mp4'],
+    });
+  });
+
   it('traite successFlag 2 et 3 comme des échecs', async () => {
     for (const flag of [2, 3]) {
       vi.stubGlobal('fetch', mockJson({ code: 200, data: { successFlag: flag } }));

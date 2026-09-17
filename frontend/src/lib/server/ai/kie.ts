@@ -409,7 +409,18 @@ export async function getTask(provider: KieProvider, handle: TaskHandle): Promis
     // successFlag : 0 en cours, 1 réussi, 2 et 3 échoué.
     const flag = Number(data.successFlag ?? 0);
     if (flag === 1) {
-      return { status: 'SUCCEEDED', urls: parseUrls(data.resultUrls), costMs: null };
+      const urls = veoResultUrls(data);
+      if (urls.length === 0) {
+        // Réussite ANNONCÉE sans fichier exploitable : ce n'est pas une
+        // génération ratée, c'est une dérive de forme côté fournisseur. La
+        // vidéo est déjà produite et facturée — on veut le voir dans les logs
+        // plutôt que de la déclarer en échec en silence.
+        log.error('kie: tâche Veo réussie sans URL exploitable', {
+          taskId: handle.taskId,
+          keys: Object.keys(data),
+        });
+      }
+      return { status: 'SUCCEEDED', urls, costMs: null };
     }
     if (flag === 2 || flag === 3) {
       return {
@@ -437,6 +448,46 @@ export async function getTask(provider: KieProvider, handle: TaskHandle): Promis
     };
   }
   return { status: 'RUNNING' };
+}
+
+/** Objet, objet encodé en chaîne, ou rien — les trois arrivent selon l'endpoint. */
+function asRecord(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+/**
+ * Veo range ses URLs dans un objet `response` IMBRIQUÉ — `data.response.resultUrls` —
+ * là où la famille « jobs » les pose à plat dans `data.resultJson`.
+ *
+ * Les lire à plat sur `data` rendait une liste vide pour une tâche pourtant
+ * réussie : la vidéo existait bel et bien chez kie.ai et était déjà facturée,
+ * mais `settleGeneration` la refermait en `PROVIDER_EMPTY_RESULT`. Le créateur
+ * voyait une erreur, personne ne voyait la vidéo. C'est la raison d'être de
+ * cette fonction — ne pas revenir à `data.resultUrls` seul.
+ *
+ * Les clés sont essayées dans l'ordre où kie.ai les remplit ; la forme à plat
+ * reste en dernier recours, elle ne coûte rien.
+ */
+function veoResultUrls(data: Record<string, unknown>): string[] {
+  const response = asRecord(data.response);
+  for (const candidate of [
+    response.resultUrls,
+    response.fullResultUrls,
+    response.originUrls,
+    data.resultUrls,
+  ]) {
+    const urls = parseUrls(candidate);
+    if (urls.length > 0) return urls;
+  }
+  return [];
 }
 
 /**
