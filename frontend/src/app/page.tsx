@@ -7,6 +7,7 @@
 import Link from 'next/link';
 import { SiteHeader } from '@/components/marketing/SiteHeader';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
+import { DemoVideo } from '@/components/marketing/DemoVideo';
 import { buttonStyles } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Feedback';
 import { ArrowRightIcon, CheckIcon, ImageIcon, VideoIcon } from '@/components/icons';
@@ -54,6 +55,7 @@ export default function Home() {
   // l'étendue du catalogue, pas assez pour noyer la page.
   const FEATURED_SLUGS = ['nano-banana-2', 'veo-3-1', 'kling-2-6'];
   const featured: AiModel[] = AI_MODELS.filter((m) => FEATURED_SLUGS.includes(m.slug));
+  const starter = CREDIT_PACKS[0];
 
   return (
     <>
@@ -90,9 +92,13 @@ export default function Home() {
               Créer mon compte
               <ArrowRightIcon className="size-4" />
             </Link>
-            <span className="text-sm text-ink-300">
-              À partir de {formatAmount(5000, 'XOF')} les 50 crédits
-            </span>
+            {/* Tiré du premier pack, pas écrit en dur : la ligne annonçait
+                « 5 000 F CFA les 50 crédits », un pack qui n'existait plus. */}
+            {starter ? (
+              <span className="text-sm text-ink-300">
+                À partir de {formatAmount(starter.priceFcfa, 'XOF')} les {starter.credits} crédits
+              </span>
+            ) : null}
           </div>
 
           {/* Ici se trouvaient « 4,8/5 » et « 500+ créateurs déjà inscrits »,
@@ -104,12 +110,15 @@ export default function Home() {
               d'agrégation, jamais d'une constante. */}
         </div>
 
-        {/* Il y avait ici trois « aperçus » en grille. C'étaient des SVG
-            dessinés localement, portant la mention « aperçu simulé » incrustée
-            dans l'image, présentés comme « des rendus, pas une illustration
-            décorative ». Retirés : la section « Les modèles disponibles » plus
-            bas montre les VRAIS visuels des six modèles, ce qui rendait cette
-            grille redondante autant que fausse. */}
+        {/* Il y avait ici trois « aperçus » en grille : des SVG dessinés
+            localement, portant la mention « aperçu simulé ». Retirés, ils sont
+            remplacés par une démonstration du parcours dont le personnage et le
+            clip sont de vrais rendus — voir `demo-video/` à la racine du dépôt.
+            Placée après le CTA, pas avant : la vidéo prouve, elle ne doit pas
+            retarder l'action. */}
+        <div className="rise-in mt-12 sm:mt-14" style={{ animationDelay: '280ms' }}>
+          <DemoVideo />
+        </div>
       </section>
 
       {/* ── Formats de sortie (bandeau défilant) ──────────────────────── */}

@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-10-06T21:19:36.095Z",
+  "portrait": {
+    "taskId": "2d81040b079dd5af97da693ef162f593",
+    "model": "nano-banana-2",
+    "prompt": "Portrait d’une personne fictive. Jeune femme togolaise de 24 ans, mince, 1m68, tresses longues, style afro-urbain, grandes boucles d’oreilles dorées. portrait photographique en gros plan, cadrage tête et épaules uniquement, visage de face, regard vers l’objectif, expression neutre et détendue, fond blanc uni, parfaitement uniforme, sans ombre portée ni dégradé, éclairage de studio doux et homogène, sans ombre dure sur le visage, photoréaliste, netteté élevée sur les yeux, aucun texte, aucun logo, aucun filigrane, aucun cadre, une seule personne dans l’image.",
+    "sourceUrl": "https://tempfile.aiquickdraw.com/workers/images/image_ea7580cdf585e3b5b293545a779bc426.jpg"
+  },
+  "video": {
+    "taskId": "3921be4df60f999aa0676593703e9989",
+    "model": "veo-3-1",
+    "prompt": "Jeune femme togolaise de 24 ans, mince, 1m68, tresses longues, style afro-urbain, grandes boucles d’oreilles dorées. Elle marche dans un marché coloré de Lomé, sourit et salue la caméra, lumière dorée de fin d’après-midi.",
+    "sourceUrl": "https://tempfile.aiquickdraw.com/v/3921be4df60f999aa0676593703e9989_0_1791321561.mp4"
+  }
+}

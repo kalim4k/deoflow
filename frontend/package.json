@@ -24,6 +24,8 @@
     "smoke:auth": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke-auth.ts",
     "icons": "node scripts/generate-icons.mjs",
     "illustration": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/generate-model-illustration.mjs",
+    "demo:assets": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/generate-demo-assets.ts",
+    "demo:facts": "tsx --tsconfig tsconfig.scripts.json scripts/demo-facts.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

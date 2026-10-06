@@ -1,0 +1,23 @@
+{
+  "name": "deoflow-demo-video",
+  "private": true,
+  "type": "module",
+  "description": "Vidéo de démonstration de la page d'accueil — source Remotion, rendu en MP4 vers frontend/public/demo.",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "node scripts/render.mjs",
+    "typecheck": "tsc --noEmit",
+    "stills": "node scripts/stills.mjs"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.529",
+    "@remotion/google-fonts": "4.0.529",
+    "remotion": "4.0.529",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "typescript": "7.0.2"
+  }
+}

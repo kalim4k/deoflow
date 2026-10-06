@@ -1,0 +1,120 @@
+{
+  "$comment": "Généré par frontend/scripts/demo-facts.ts à partir du catalogue — ne pas éditer à la main.",
+  "starterPack": {
+    "name": "Pack Starter",
+    "badge": null,
+    "credits": 3000,
+    "price": "9 000 F CFA",
+    "perCredit": 3,
+    "images": 125,
+    "klingClips": 18
+  },
+  "packs": [
+    {
+      "name": "Pack Starter",
+      "badge": null,
+      "credits": 3000,
+      "price": "9 000 F CFA",
+      "perCredit": 3,
+      "images": 125,
+      "klingClips": 18
+    },
+    {
+      "name": "Pack Créateur",
+      "badge": "Populaire",
+      "credits": 6667,
+      "price": "20 000 F CFA",
+      "perCredit": 3,
+      "images": 277,
+      "klingClips": 40
+    },
+    {
+      "name": "Pack Pro",
+      "badge": "Pour production intensive",
+      "credits": 10000,
+      "price": "30 000 F CFA",
+      "perCredit": 3,
+      "images": 416,
+      "klingClips": 60
+    }
+  ],
+  "faceModels": [
+    {
+      "slug": "nano-banana-2",
+      "name": "Nano Banana 2",
+      "cost": 24
+    },
+    {
+      "slug": "gpt-image-2",
+      "name": "GPT Image 2",
+      "cost": 18
+    }
+  ],
+  "videoModels": [
+    {
+      "slug": "veo-3-1",
+      "name": "Veo 3.1",
+      "provider": "Google DeepMind",
+      "tagline": "Qualité cinéma, avec le son.",
+      "trait": "quality",
+      "traitLabel": "Haute qualité",
+      "etaSeconds": 120,
+      "shortest": 8,
+      "startingPrice": 90,
+      "inputSummary": "Texte ou image"
+    },
+    {
+      "slug": "kling-2-6",
+      "name": "Kling 2.6 Motion Control",
+      "provider": "Kuaishou",
+      "tagline": "Transfère un mouvement filmé sur votre personnage.",
+      "trait": "quality",
+      "traitLabel": "Haute qualité",
+      "etaSeconds": 90,
+      "shortest": 3,
+      "startingPrice": 99,
+      "inputSummary": "Image + vidéo requises"
+    },
+    {
+      "slug": "seedance-2-5",
+      "name": "Seedance 2.5",
+      "provider": "ByteDance",
+      "tagline": "Jusqu’à 30 secondes d’un seul tenant.",
+      "trait": "quality",
+      "traitLabel": "Haute qualité",
+      "etaSeconds": 100,
+      "shortest": 1,
+      "startingPrice": 189,
+      "inputSummary": "Texte, images, vidéos ou sons"
+    },
+    {
+      "slug": "minimax-h3",
+      "name": "MiniMax H3",
+      "provider": "MiniMax",
+      "tagline": "Le personnage d’une photo, qui parle avec une voix que vous fournissez.",
+      "trait": "quality",
+      "traitLabel": "Haute qualité",
+      "etaSeconds": 90,
+      "shortest": 4,
+      "startingPrice": 96,
+      "inputSummary": "Texte, images, vidéos ou sons"
+    },
+    {
+      "slug": "gemini-omni-flash",
+      "name": "Gemini Omni Flash",
+      "provider": "Google",
+      "tagline": "Le brouillon rapide — texte, image, vidéo ou voix.",
+      "trait": "fast",
+      "traitLabel": "Rapide",
+      "etaSeconds": 45,
+      "shortest": 4,
+      "startingPrice": 189,
+      "inputSummary": "Texte, images, vidéos ou sons"
+    }
+  ],
+  "veo": {
+    "seconds": 8,
+    "cost720": 90,
+    "cost1080": 105
+  }
+}

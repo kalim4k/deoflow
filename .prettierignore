@@ -6,3 +6,5 @@ coverage
 pnpm-lock.yaml
 *.md
 backend/src/generated
+# Sorties de rendu de la vidéo de démonstration (images, bundle, journaux).
+demo-video/out
