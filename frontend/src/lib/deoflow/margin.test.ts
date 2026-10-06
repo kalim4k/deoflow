@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { AI_MODELS } from './catalog';
 import { CREDIT_PACKS, pricePerCredit } from './packs';
 import { CREDIT_FCFA, MARGIN, hasVideoInput, kieCost, priceCredits } from './pricing';
-import { minBillableSeconds } from './capabilities';
+import { REFERENCE_VIDEO_MAX_SECONDS, capabilitiesFor, minBillableSeconds } from './capabilities';
 
 /**
  * Ce fichier protège la marge, pas le code.
@@ -80,6 +80,35 @@ describe('facturation propre à chaque fournisseur', () => {
     expect(sansVideo).toBe(630);
     expect(avecVideo).toBe(760);
     expect(avecVideo!).toBeGreaterThan(sansVideo!);
+  });
+
+  it('reproduit le barème publié de MiniMax H3', () => {
+    // 8 crédits la seconde en 768P, la définition que `kie.ts` verrouille.
+    // Si quelqu'un ouvrait le 2K sans toucher à la grille, le coût réel
+    // passerait à 13 — et rien ici ne bougerait. D'où le verrou côté serveur.
+    expect(kieCost('minimax-h3', { seconds: 4 })).toBe(32);
+    expect(kieCost('minimax-h3', { seconds: 15 })).toBe(120);
+  });
+
+  it('ajoute la durée de la vidéo de référence à la facture MiniMax', () => {
+    // Le serveur ne mesure pas les fichiers envoyés : il facture le plafond
+    // autorisé par l'emplacement. Ce test attache le prix à CETTE constante,
+    // de sorte qu'élargir l'emplacement sans toucher à la grille — donc vendre
+    // à perte — fasse échouer la suite au lieu de passer inaperçu.
+    const sans = kieCost('minimax-h3', { seconds: 4, hasVideoInput: false })!;
+    const avec = kieCost('minimax-h3', { seconds: 4, hasVideoInput: true })!;
+    expect(avec - sans).toBe(8 * REFERENCE_VIDEO_MAX_SECONDS);
+    expect(avec).toBeGreaterThan(sans);
+  });
+
+  it('n’expose jamais assez d’images de référence pour déclencher le supplément', () => {
+    // kie.ai offre les 5 premières images et facture 4 crédits au-delà. Le
+    // supplément n'est pas modélisé dans la grille — il n'a donc pas le droit
+    // d'être atteignable.
+    const slot = capabilitiesFor('minimax-h3')
+      ?.modes.flatMap((mode) => mode.slots)
+      .find((s) => s.key === 'reference_image_urls');
+    expect(slot?.maxCount).toBeLessThanOrEqual(5);
   });
 
   it('reproduit le barème publié de Gemini Omni', () => {

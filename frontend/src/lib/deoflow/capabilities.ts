@@ -26,6 +26,23 @@ import type { MediaKind } from './types';
 
 const MB = 1024 * 1024;
 
+/**
+ * Durée maximale d'une vidéo de référence chez MiniMax H3, en secondes.
+ *
+ * ⚠️ Exportée parce que `pricing.ts` en a besoin AUSSI : chez ce modèle, la
+ * durée de la vidéo d'entrée s'ajoute à celle du rendu dans la facture kie.ai.
+ * Le serveur ne mesure pas les fichiers envoyés, donc le prix retient ce
+ * plafond comme pire cas. Si les deux nombres cessaient d'être le même, on
+ * vendrait en dessous du coût sans que rien ne le signale — d'où la constante
+ * partagée plutôt que deux nombres écrits chacun de leur côté.
+ *
+ * 6 secondes est un compromis : assez pour donner un mouvement de caméra, et
+ * assez court pour que le supplément reste supportable (144 crédits, contre
+ * 240 si on autorisait 10 s). C'est le nombre à revoir en premier le jour où
+ * la durée réelle des fichiers envoyés sera mesurée.
+ */
+export const REFERENCE_VIDEO_MAX_SECONDS = 6;
+
 const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp'];
 const VIDEO_MIME = ['video/mp4', 'video/quicktime'];
 const AUDIO_MIME = [
@@ -501,6 +518,65 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
             label: 'Sons de référence',
             hint: 'Jusqu’à 3 pistes, 30 s cumulées. MP3, WAV, AAC ou OGG — 15 Mo chacune.',
             totalMaxSeconds: 30,
+          },
+        ],
+      },
+    ],
+  },
+
+  'minimax-h3': {
+    promptRequirement: 'required',
+    promptMaxLength: 7_000,
+    apiRatios: ['adaptive', '21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    duration: { kind: 'range', min: 4, max: 15, step: 1, default: 6 },
+    params: [],
+    characterRef: { mode: 'references', slot: 'reference_image_urls' },
+    modes: [
+      textMode('Décrivez la séquence — de 4 à 15 secondes.'),
+      {
+        id: 'references',
+        label: 'Références',
+        description:
+          'Donnez un visage, un mouvement de caméra, une voix — et renvoyez-y dans le prompt : « le personnage de l’image 2 chante sur l’audio 3 ».',
+        requiresAnySlot: true,
+        slots: [
+          imageSlot({
+            key: 'reference_image_urls',
+            requirement: 'optional',
+            // Plafonné à 5 À DESSEIN : kie.ai offre les cinq premières images
+            // et facture 4 crédits chacune au-delà. S'arrêter là rend le
+            // supplément impossible, donc inutile à modéliser dans le prix.
+            maxCount: 5,
+            label: 'Images de référence',
+            hint: 'Jusqu’à 5 images. JPG, PNG ou WEBP — 30 Mo chacune.',
+          }),
+          {
+            key: 'reference_video_urls',
+            wire: 'array',
+            media: 'video',
+            requirement: 'optional',
+            // Une seule vidéo, et courte : sa durée s'AJOUTE à la durée
+            // facturée chez kie.ai. Le serveur ne la mesure pas (voir
+            // `pricing.ts`), donc le prix retient le pire cas autorisé — plus
+            // l'emplacement est large, plus le créateur paie pour du vide.
+            maxCount: 1,
+            maxBytes: 50 * MB,
+            accept: VIDEO_MIME,
+            label: 'Vidéo de référence',
+            hint: 'Une vidéo de 6 s maximum, pour le mouvement de caméra. MP4 ou MOV — 50 Mo.',
+            maxSeconds: REFERENCE_VIDEO_MAX_SECONDS,
+            totalMaxSeconds: REFERENCE_VIDEO_MAX_SECONDS,
+          },
+          {
+            key: 'reference_audio_urls',
+            wire: 'array',
+            media: 'audio',
+            requirement: 'optional',
+            maxCount: 1,
+            maxBytes: 15 * MB,
+            accept: AUDIO_MIME,
+            label: 'Son de référence',
+            hint: 'Une piste — la voix que le personnage doit suivre. MP3 ou WAV — 15 Mo.',
           },
         ],
       },

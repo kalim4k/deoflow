@@ -23,6 +23,7 @@
     "seed:admin": "tsx --tsconfig tsconfig.scripts.json --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/seed-admin-demo.ts",
     "smoke:auth": "tsx --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/smoke-auth.ts",
     "icons": "node scripts/generate-icons.mjs",
+    "illustration": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/generate-model-illustration.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {

@@ -48,7 +48,8 @@ export type KieModelId =
   | 'kling-2.6/motion-control'
   | 'gemini-omni-video'
   | 'bytedance/seedance-2-5'
-  | 'veo3_lite';
+  | 'veo3_lite'
+  | 'minimax-h3/reference-to-video';
 
 export type TaskFamily = 'jobs' | 'veo';
 
@@ -111,6 +112,7 @@ const ENDPOINTS: Record<string, Pick<ModelBinding, 'id' | 'family' | 'kind'>> = 
   'kling-2-6': { id: 'kling-2.6/motion-control', family: 'jobs', kind: 'video' },
   'seedance-2-5': { id: 'bytedance/seedance-2-5', family: 'jobs', kind: 'video' },
   'gemini-omni-flash': { id: 'gemini-omni-video', family: 'jobs', kind: 'video' },
+  'minimax-h3': { id: 'minimax-h3/reference-to-video', family: 'jobs', kind: 'video' },
 };
 
 /**
@@ -185,6 +187,11 @@ const LOCKED: Partial<Record<KieModelId, Record<string, unknown>>> = {
     return_last_frame: false,
   },
   'kling-2.6/motion-control': { mode: '720p' },
+  // L'API propose 768P ou 2K et prend 2K PAR DÉFAUT : 13 crédits la seconde au
+  // lieu de 8, sans que personne l'ait demandé. On impose donc la définition
+  // d'entrée de gamme, comme partout ailleurs — l'ouvrir suppose un
+  // multiplicateur de crédits, donc une décision de prix.
+  'minimax-h3/reference-to-video': { resolution: '768P' },
 };
 
 /** Format retenu quand le créateur n'en a pas choisi un que l'API accepte. */
@@ -193,6 +200,7 @@ const DEFAULT_RATIO: Partial<Record<KieModelId, string>> = {
   'gpt-image-2-image-to-image': 'auto',
   'gemini-omni-video': '16:9',
   'bytedance/seedance-2-5': 'adaptive',
+  'minimax-h3/reference-to-video': 'adaptive',
 };
 
 /**

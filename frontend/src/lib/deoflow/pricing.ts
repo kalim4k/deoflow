@@ -19,6 +19,8 @@
  * 1828,8 — 8 crédits l'image, soit le tarif publié au chiffre près.
  */
 
+import { REFERENCE_VIDEO_MAX_SECONDS } from './capabilities';
+
 /** Ce que le créateur paie pour ce que le fournisseur nous coûte. */
 export const MARGIN = 3;
 
@@ -68,7 +70,20 @@ type KieCost =
    * Gemini Omni : une part fixe plus une part à la seconde tant qu'aucune
    * vidéo n'est fournie, et un forfait dès qu'il y en a une.
    */
-  | { kind: 'gemini'; base: number; perSecond: number; withVideo: number };
+  | { kind: 'gemini'; base: number; perSecond: number; withVideo: number }
+  /**
+   * MiniMax H3 : un prix à la seconde appliqué à la durée RENDUE **plus** la
+   * durée de la vidéo d'entrée. Le serveur ne mesure pas les fichiers, donc on
+   * facture le plafond autorisé par l'emplacement — `inputSeconds`.
+   *
+   * C'est volontairement défavorable au créateur qui joint une vidéo de deux
+   * secondes : il paie comme s'il en avait joint dix. L'inverse — facturer une
+   * hypothèse basse — ferait vendre à perte dès qu'une référence dépasse le
+   * rendu, et une perte à la génération ne se voit qu'au relevé kie.ai.
+   * Mesurer la durée réelle à l'envoi (Cloudinary la renvoie) supprimerait ce
+   * compromis ; c'est la bonne correction, elle n'est pas faite.
+   */
+  | { kind: 'minimax'; perSecond: number; inputSeconds: number };
 
 const KIE_COSTS: Record<string, KieCost> = {
   // 8 crédits en 1K (12 en 2K, 18 en 4K — nous verrouillons le 1K).
@@ -90,6 +105,10 @@ const KIE_COSTS: Record<string, KieCost> = {
   // 4 s → 63, 6 s → 84, 8 s → 105, 10 s → 126 : 21 de part fixe, 10,5 par
   // seconde. Avec une vidéo, 168 quelle que soit la durée.
   'gemini-omni-flash': { kind: 'gemini', base: 21, perSecond: 10.5, withVideo: 168 },
+  // 8 crédits la seconde en 768P (13 en 2K — nous verrouillons le 768P, voir
+  // `LOCKED` dans `lib/server/ai/kie.ts`). Les 5 premières images de référence
+  // sont offertes, et l'emplacement s'arrête à 5 : aucun supplément possible.
+  'minimax-h3': { kind: 'minimax', perSecond: 8, inputSeconds: REFERENCE_VIDEO_MAX_SECONDS },
 };
 
 /** Coût fournisseur d'une génération, en crédits kie.ai. */
@@ -120,6 +139,8 @@ export function kieCost(slug: string, ctx: PriceContext = {}): number | null {
       return ctx.hasVideoInput ? cost.withVideo * seconds * 2 : cost.withoutVideo * seconds;
     case 'gemini':
       return ctx.hasVideoInput ? cost.withVideo : cost.base + cost.perSecond * seconds;
+    case 'minimax':
+      return cost.perSecond * (seconds + (ctx.hasVideoInput ? cost.inputSeconds : 0));
   }
 }
 

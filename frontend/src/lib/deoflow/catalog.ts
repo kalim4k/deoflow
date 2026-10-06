@@ -87,6 +87,21 @@ export const AI_MODELS: AiModel[] = [
     active: true,
   },
   {
+    slug: 'minimax-h3',
+    name: 'MiniMax H3',
+    provider: 'MiniMax',
+    kind: 'video',
+    tagline: 'Le personnage d’une photo, qui parle avec une voix que vous fournissez.',
+    description:
+      'Un modèle de référence : vous lui donnez un visage, un mouvement de caméra et une piste audio, puis vous y renvoyez dans votre description — « le personnage de l’image 2 chante sur l’audio 3 ». C’est le seul du catalogue à caler les lèvres sur une voix que vous apportez, au lieu d’en inventer une. De 4 à 15 secondes. La vidéo de référence est facturée en plus du rendu : joignez-en une seulement si le mouvement compte vraiment.',
+    trait: 'quality',
+    // Le vertical d'abord : la cible publie sur TikTok.
+    ratios: ['9:16', '16:9', '1:1'],
+    etaSeconds: 90,
+    illustration: '/models/minimax-h3',
+    active: true,
+  },
+  {
     slug: 'gemini-omni-flash',
     name: 'Gemini Omni Flash',
     provider: 'Google',
