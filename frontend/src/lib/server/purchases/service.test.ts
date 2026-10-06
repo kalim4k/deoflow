@@ -144,14 +144,15 @@ describe('démarrage', () => {
     seedUser();
     const result = await startPurchase({ userId: 'u1', packId: 'createur' });
 
-    // 3000 crédits × 3 FCFA — la valeur vient de CREDIT_PACKS.
-    expect(result.amountFcfa).toBe(9000);
-    expect(result.credits).toBe(3000);
+    // 20 000 FCFA → 6667 crédits (arrondi en faveur de l'acheteur) — la valeur
+    // vient de CREDIT_PACKS.
+    expect(result.amountFcfa).toBe(20000);
+    expect(result.credits).toBe(6667);
     expect(h.orders.get(result.orderId)).toMatchObject({
-      amount: 9000,
+      amount: 20000,
       status: 'PENDING',
       provider: 'maketou',
-      metadata: { packId: 'createur', credits: 3000 },
+      metadata: { packId: 'createur', credits: 6667 },
     });
   });
 

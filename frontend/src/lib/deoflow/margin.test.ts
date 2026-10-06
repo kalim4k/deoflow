@@ -19,7 +19,13 @@ describe('valeur du crédit', () => {
     // marge invisible en plus des 3× ; moins cher les rognerait en silence.
     for (const pack of CREDIT_PACKS) {
       expect(pricePerCredit(pack)).toBe(CREDIT_FCFA);
-      expect(pack.priceFcfa).toBe(pack.credits * CREDIT_FCFA);
+      // Le prix est un montant rond, les crédits en découlent au crédit
+      // supérieur : l'écart reste sous un crédit, et toujours au profit de
+      // l'acheteur. Un écart plus large serait une remise ou un surcoût caché.
+      expect(pack.credits).toBe(Math.ceil(pack.priceFcfa / CREDIT_FCFA));
+      const gap = pack.credits * CREDIT_FCFA - pack.priceFcfa;
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThan(CREDIT_FCFA);
     }
   });
 

@@ -53,10 +53,12 @@ describe('catalogue', () => {
 });
 
 describe('packs de crédits', () => {
-  it('vend le crédit au tarif kie.ai : 1000 pour 3000 FCFA', () => {
+  it('propose trois paliers à 9 000, 20 000 et 30 000 FCFA, au tarif kie.ai', () => {
+    // 3 FCFA le crédit. 20 000 ne se divise pas par 3 : arrondi au crédit
+    // supérieur, en faveur de l'acheteur — voir `packs.ts`.
     expect(CREDIT_PACKS.map((p) => [p.credits, p.priceFcfa])).toEqual([
-      [1000, 3000],
       [3000, 9000],
+      [6667, 20000],
       [10000, 30000],
     ]);
   });

@@ -79,8 +79,12 @@ function DashboardBody() {
             <div className="flex flex-col gap-1">
               <h2 className="font-display text-lg">Rechargez pour commencer</h2>
               <p className="text-sm text-ink-500">
+                {/* Le nombre d'images se divise par le prix d'une image (24 crédits,
+                    comme la carte « Solde » plus bas). Il affichait les crédits
+                    eux-mêmes — « 1000 images » pour 41 réelles. */}
                 Le {starter.name.toLowerCase()} donne {starter.credits} crédits pour{' '}
-                {formatAmount(starter.priceFcfa, 'XOF')} — de quoi générer {starter.credits} images.
+                {formatAmount(starter.priceFcfa, 'XOF')} — de quoi générer{' '}
+                {Math.floor(starter.credits / 24)} images Nano Banana.
               </p>
             </div>
             <AppLink href="/wallet/topup" className={buttonStyles('ember', 'md')}>

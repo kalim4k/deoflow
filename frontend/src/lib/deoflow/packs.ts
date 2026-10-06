@@ -9,28 +9,19 @@ import { CREDIT_FCFA } from './pricing';
 //
 // Les paliers n'existent que pour proposer des tickets adaptés à des usages
 // différents : essayer, produire régulièrement, produire beaucoup.
+//
+// Les packs partent du PRIX, montant rond que l'acheteur voit et paie ; les
+// crédits s'en déduisent. 20 000 FCFA ne se divise pas par 3 : on arrondit au
+// crédit supérieur, en faveur de l'acheteur (6 667 crédits, soit un crédit
+// offert). Arrondir vers le bas lui ferait payer 2 FCFA de vent.
+function byPrice(id: string, name: string, priceFcfa: number, badge: string | null): CreditPack {
+  return { id, name, priceFcfa, credits: Math.ceil(priceFcfa / CREDIT_FCFA), badge };
+}
+
 export const CREDIT_PACKS: CreditPack[] = [
-  {
-    id: 'starter',
-    name: 'Pack Starter',
-    credits: 1000,
-    priceFcfa: 1000 * CREDIT_FCFA,
-    badge: null,
-  },
-  {
-    id: 'createur',
-    name: 'Pack Créateur',
-    credits: 3000,
-    priceFcfa: 3000 * CREDIT_FCFA,
-    badge: 'Populaire',
-  },
-  {
-    id: 'pro',
-    name: 'Pack Pro',
-    credits: 10000,
-    priceFcfa: 10000 * CREDIT_FCFA,
-    badge: 'Pour production intensive',
-  },
+  byPrice('starter', 'Pack Starter', 9_000, null),
+  byPrice('createur', 'Pack Créateur', 20_000, 'Populaire'),
+  byPrice('pro', 'Pack Pro', 30_000, 'Pour production intensive'),
 ];
 
 /** Prix unitaire arrondi au franc — identique sur tous les packs. */

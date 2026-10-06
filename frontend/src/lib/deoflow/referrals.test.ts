@@ -19,8 +19,8 @@ describe('barème', () => {
   });
 
   it('calcule la commission sur les paliers réels du catalogue', () => {
-    expect(commissionFor(3_000)).toBe(900); // Pack Starter
-    expect(commissionFor(9_000)).toBe(2_700); // Pack Créateur
+    expect(commissionFor(9_000)).toBe(2_700); // Pack Starter
+    expect(commissionFor(20_000)).toBe(6_000); // Pack Créateur
     expect(commissionFor(30_000)).toBe(9_000); // Pack Pro
   });
 
