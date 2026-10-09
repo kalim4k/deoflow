@@ -44,6 +44,7 @@ import { downloadUrl, generationFilename } from '@/lib/deoflow/download';
 import {
   capabilitiesFor,
   characterRefFor,
+  countImageInputs,
   defaultParams,
   effectiveSlots,
   paramsFor,
@@ -325,6 +326,9 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
     // son image étant déjà hébergée.
     (media.bySlot[slot.key] ?? []).some((f) => f.type.startsWith('video/')),
   );
+  // Même raison pour les images : Seedream facture chacune au-delà de la
+  // première. Le visage d'un avatar est compté — il occupe sa place.
+  const imagesJoined = countImageInputs(slots, (key) => (media.bySlot[key] ?? []).length);
 
   const cost =
     model.kind === 'video' && durationSeconds === null
@@ -332,6 +336,7 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
       : priceCredits(model.slug, {
           ...(durationSeconds !== null ? { seconds: durationSeconds } : {}),
           hasVideoInput: videoJoined,
+          inputImages: imagesJoined,
           params,
         });
 

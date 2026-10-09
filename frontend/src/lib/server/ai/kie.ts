@@ -45,6 +45,8 @@ const REQUEST_TIMEOUT_MS = Number(process.env.KIE_TIMEOUT_MS ?? 20_000);
 export type KieModelId =
   | 'nano-banana-2'
   | 'gpt-image-2-image-to-image'
+  | 'seedream/5-pro-text-to-image'
+  | 'seedream/5-pro-image-to-image'
   | 'kling-2.6/motion-control'
   | 'gemini-omni-video'
   | 'bytedance/seedance-2-5'
@@ -98,12 +100,26 @@ interface ModelBinding {
   /** L'API refuse la requête sans média de référence, quel que soit le mode. */
   requiresImage: boolean;
   requiresVideo: boolean;
+  /**
+   * Endpoint propre à un mode, quand le fournisseur en sépare plusieurs pour un
+   * même modèle (Seedream : texte seul, ou images de départ). Absent = `id`
+   * pour tous les modes.
+   */
+  modeIds?: Partial<Record<string, KieModelId>>;
 }
 
 /** Ce qui identifie le modèle chez kie.ai — tout le reste en est dérivé. */
-const ENDPOINTS: Record<string, Pick<ModelBinding, 'id' | 'family' | 'kind'>> = {
+const ENDPOINTS: Record<string, Pick<ModelBinding, 'id' | 'family' | 'kind' | 'modeIds'>> = {
   'nano-banana-2': { id: 'nano-banana-2', family: 'jobs', kind: 'image' },
   'gpt-image-2': { id: 'gpt-image-2-image-to-image', family: 'jobs', kind: 'image' },
+  // Deux endpoints chez kie.ai : l'un exige des images (`image_urls` est
+  // obligatoire), l'autre n'en prend aucune. Le mode retenu choisit.
+  'seedream-5-pro': {
+    id: 'seedream/5-pro-image-to-image',
+    family: 'jobs',
+    kind: 'image',
+    modeIds: { text: 'seedream/5-pro-text-to-image' },
+  },
   // Variante **Lite** : 30 crédits kie.ai le clip en 720p, contre 250 pour
   // `veo3` (Quality) et 60 pour `veo3_fast`. Choix du propriétaire — sur un
   // format vertical destiné à TikTok, l'écart de rendu ne justifiait pas huit
@@ -178,6 +194,10 @@ export interface TaskHandle {
 const LOCKED: Partial<Record<KieModelId, Record<string, unknown>>> = {
   'nano-banana-2': { resolution: '1K', output_format: 'jpg' },
   'gpt-image-2-image-to-image': { resolution: '1K' },
+  // `basic` = 1K à 7 crédits, `high` = 2K à 14. Le filtre de contenu est
+  // désactivé par défaut côté texte : on l'impose sur les deux endpoints.
+  'seedream/5-pro-text-to-image': { quality: 'basic', output_format: 'jpeg', nsfw_checker: true },
+  'seedream/5-pro-image-to-image': { quality: 'basic', output_format: 'jpeg', nsfw_checker: true },
   'gemini-omni-video': { resolution: '720p' },
   'bytedance/seedance-2-5': {
     resolution: '720p',
@@ -198,6 +218,10 @@ const LOCKED: Partial<Record<KieModelId, Record<string, unknown>>> = {
 const DEFAULT_RATIO: Partial<Record<KieModelId, string>> = {
   'nano-banana-2': 'auto',
   'gpt-image-2-image-to-image': 'auto',
+  // Pas de format « auto » chez Seedream, et le paramètre est obligatoire : on
+  // retombe sur le vertical, celui que la cible publie.
+  'seedream/5-pro-text-to-image': '9:16',
+  'seedream/5-pro-image-to-image': '9:16',
   'gemini-omni-video': '16:9',
   'bytedance/seedance-2-5': 'adaptive',
   'minimax-h3/reference-to-video': 'adaptive',
@@ -317,9 +341,9 @@ function mapStatus(status: number): KieErrorCode {
 }
 
 export async function createTask(provider: KieProvider, req: GenerateRequest): Promise<TaskHandle> {
-  const binding = bindingFor(req.modelSlug);
+  const base = bindingFor(req.modelSlug);
   const caps = MODEL_CAPABILITIES[req.modelSlug];
-  if (!binding || !caps) {
+  if (!base || !caps) {
     throw new KieError('PROVIDER_BAD_REQUEST', `Modèle inconnu : ${req.modelSlug}`);
   }
 
@@ -327,6 +351,11 @@ export async function createTask(provider: KieProvider, req: GenerateRequest): P
   if (!mode) {
     throw new KieError('PROVIDER_BAD_REQUEST', `Mode inconnu : ${req.mode}`);
   }
+
+  // L'identifiant suit le mode quand le fournisseur sépare ses endpoints — et
+  // avec lui les réglages imposés et le format de repli, indexés par
+  // identifiant dans `LOCKED` et `DEFAULT_RATIO`.
+  const binding: ModelBinding = { ...base, id: base.modeIds?.[mode.id] ?? base.id };
 
   // Vérifier les emplacements AVANT tout appel réseau : une requête refusée
   // par kie.ai après débit du créateur oblige à rembourser, et le

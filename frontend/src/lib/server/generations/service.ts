@@ -39,6 +39,7 @@ import { findModel } from '@/lib/deoflow/catalog';
 import { hasVideoInput, priceCredits } from '@/lib/deoflow/pricing';
 import {
   capabilitiesFor,
+  countImageInputs,
   effectiveSlots,
   minBillableSeconds,
   modeFor,
@@ -107,9 +108,20 @@ export function quoteGeneration(input: CreateGenerationInput): {
   const withVideo = hasVideoInput(input.media ?? undefined);
 
   if (model.kind === 'image') {
+    // Compté sur les URLs réellement reçues, dans les emplacements du mode :
+    // c'est ce que le fournisseur facturera, et ce qu'un client modifié ne
+    // peut pas minorer sans envoyer moins d'images.
+    const imageMode = modeFor(input.modelSlug, input.mode);
+    const inputImages = imageMode
+      ? countImageInputs(
+          effectiveSlots(imageMode, input.params ?? {}),
+          (key) => input.media?.[key]?.length ?? 0,
+        )
+      : 0;
     const credits = priceCredits(input.modelSlug, {
       hasVideoInput: withVideo,
       params: input.params ?? {},
+      inputImages,
     });
     if (credits === null) {
       throw new GenerationRequestError('MODEL_UNKNOWN', `Sans tarif : ${input.modelSlug}`);

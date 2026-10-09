@@ -44,6 +44,20 @@ export const AI_MODELS: AiModel[] = [
     active: true,
   },
   {
+    slug: 'seedream-5-pro',
+    name: 'Seedream 5.0 Pro',
+    provider: 'ByteDance',
+    kind: 'image',
+    tagline: 'Du texte net dans l’image, et vos photos retouchées ou réunies.',
+    description:
+      'Le modèle d’image de ByteDance, orienté production. Il organise mieux le texte dans l’image — y compris dans plusieurs langues — et rend la lumière, les matières et la peau de façon réaliste. À partir de vos photos, il change un décor, une couleur ou une matière, ou en réunit jusqu’à 10 dans une seule scène. Chaque image jointe au-delà de la première ajoute un petit supplément au prix.',
+    trait: 'quality',
+    ratios: ['9:16', '1:1', '16:9'],
+    etaSeconds: 15,
+    illustration: '/models/seedream-5-pro',
+    active: true,
+  },
+  {
     slug: 'veo-3-1',
     name: 'Veo 3.1',
     provider: 'Google DeepMind',

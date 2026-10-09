@@ -285,6 +285,38 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     ],
   },
 
+  'seedream-5-pro': {
+    promptRequirement: 'required',
+    // Documenté chez kie.ai : 4 à 5 000 caractères, sur les deux endpoints.
+    promptMaxLength: 5_000,
+    // Aucun « auto » : le paramètre est obligatoire chez kie.ai.
+    apiRatios: ['1:1', '4:3', '3:4', '16:9', '9:16', '2:3', '3:2', '21:9'],
+    duration: { kind: 'none' },
+    params: [],
+    characterRef: { mode: 'image', slot: 'image_urls' },
+    // Deux modes, deux endpoints — voir `ENDPOINTS` dans `lib/server/ai/kie.ts`.
+    modes: [
+      textMode('Décrivez l’image, le modèle la crée de zéro.'),
+      {
+        id: 'image',
+        label: 'Images',
+        description:
+          'Le modèle reprend vos images et applique votre description — changer un décor, une tenue, un texte, ou réunir plusieurs images en une scène.',
+        slots: [
+          imageSlot({
+            key: 'image_urls',
+            requirement: 'required',
+            // Plafond du fournisseur. Chaque image au-delà de la première
+            // coûte un supplément, que le prix répercute — voir `pricing.ts`.
+            maxCount: 10,
+            label: 'Images de départ',
+            hint: 'Jusqu’à 10 images. JPG, PNG ou WEBP — 30 Mo chacune. La première est incluse ; les suivantes ajoutent un petit supplément, compté dans le coût ci-dessous.',
+          }),
+        ],
+      },
+    ],
+  },
+
   'veo-3-1': {
     promptRequirement: 'required',
     // Longueur non documentée côté Veo : plafond prudent, jamais dépassé par
@@ -673,6 +705,23 @@ export function characterRefFor(slug: string): { mode: ModelMode; slot: MediaSlo
 /** Le modèle peut-il recevoir un avatar ? */
 export function acceptsAvatar(slug: string): boolean {
   return characterRefFor(slug) !== null;
+}
+
+/**
+ * Nombre d'images que le fournisseur recevra, sur les emplacements donnés.
+ *
+ * Le visage d'un avatar compte : il occupe une vraie place dans l'emplacement.
+ * Partagé navigateur et serveur, comme `promptOverflow` — le prix affiché et
+ * le prix débité dépendent de ce nombre, ils doivent le calculer pareil. Le
+ * serveur le tire des URLs réellement reçues, ce qui le rend non falsifiable.
+ */
+export function countImageInputs(
+  slots: MediaSlotSpec[],
+  countFor: (slotKey: string) => number,
+): number {
+  return slots
+    .filter((slot) => slot.media === 'image')
+    .reduce((total, slot) => total + Math.min(countFor(slot.key), slot.maxCount), 0);
 }
 
 /**

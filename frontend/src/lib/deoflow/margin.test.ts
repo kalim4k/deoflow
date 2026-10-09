@@ -117,6 +117,27 @@ describe('facturation propre à chaque fournisseur', () => {
     expect(slot?.maxCount).toBeLessThanOrEqual(5);
   });
 
+  it('reproduit le barème publié de Seedream 5.0 Pro', () => {
+    // 7 crédits l'image en 1K, texte seul comme à partir d'une image : la
+    // première image d'entrée est incluse.
+    expect(kieCost('seedream-5-pro')).toBe(7);
+    expect(kieCost('seedream-5-pro', { inputImages: 1 })).toBe(7);
+    expect(priceCredits('seedream-5-pro', { inputImages: 1 })).toBe(21);
+  });
+
+  it('facture chaque image d’entrée de Seedream au-delà de la première', () => {
+    // 0,5 crédit kie.ai par image supplémentaire. L'ignorer ferait vendre à
+    // perte chaque fusion de plusieurs photos — en silence.
+    expect(kieCost('seedream-5-pro', { inputImages: 2 })).toBe(7.5);
+    expect(kieCost('seedream-5-pro', { inputImages: 10 })).toBe(11.5);
+    expect(priceCredits('seedream-5-pro', { inputImages: 2 })).toBe(23);
+    expect(priceCredits('seedream-5-pro', { inputImages: 10 })).toBe(35);
+  });
+
+  it('n’applique ce supplément qu’aux modèles qui le facturent', () => {
+    expect(kieCost('nano-banana-2', { inputImages: 10 })).toBe(8);
+  });
+
   it('reproduit le barème publié de Gemini Omni', () => {
     // Valeurs de la fiche kie.ai, à recopier telles quelles : c'est le seul
     // moyen de voir tout de suite si le fournisseur change son barème.

@@ -264,6 +264,57 @@ describe('createTask — construction de la requête', () => {
     await createTask(provider, { modelSlug: 'gemini-omni-flash', prompt: 'x', aspectRatio: '1:1' });
     expect(lastInput().aspect_ratio).toBe('16:9');
   });
+
+  it('envoie Seedream sur l’endpoint du mode retenu', async () => {
+    // Deux endpoints chez kie.ai : celui des images REFUSE une requête sans
+    // `image_urls`. Envoyer le mode texte au mauvais endpoint ferait échouer
+    // chaque génération — après débit.
+    await createTask(provider, {
+      modelSlug: 'seedream-5-pro',
+      mode: 'text',
+      prompt: 'une affiche',
+      aspectRatio: '9:16',
+    });
+    expect(lastBody().model).toBe('seedream/5-pro-text-to-image');
+    expect(lastInput().image_urls).toBeUndefined();
+
+    const photos = ['https://res.cloudinary.com/x/image/upload/a.jpg'];
+    await createTask(provider, {
+      modelSlug: 'seedream-5-pro',
+      mode: 'image',
+      prompt: 'change le décor',
+      media: { image_urls: photos },
+    });
+    expect(lastBody().model).toBe('seedream/5-pro-image-to-image');
+    expect(lastInput().image_urls).toEqual(photos);
+  });
+
+  it('verrouille Seedream en 1K et filtre le contenu sur les deux endpoints', async () => {
+    for (const mode of ['text', 'image'] as const) {
+      await createTask(provider, {
+        modelSlug: 'seedream-5-pro',
+        mode,
+        prompt: 'x'.repeat(10),
+        media: { image_urls: ['https://res.cloudinary.com/x/image/upload/a.jpg'] },
+      });
+      // `high` = 2K, deux fois plus cher : il n'est pas vendu.
+      expect(lastInput().quality).toBe('basic');
+      // Désactivé par défaut côté texte chez kie.ai.
+      expect(lastInput().nsfw_checker).toBe(true);
+    }
+  });
+
+  it('impose un format à Seedream, qui n’en a pas d’automatique', async () => {
+    // Le paramètre est obligatoire chez kie.ai : sans format reconnu, on
+    // retombe sur le vertical plutôt que de ne rien envoyer.
+    await createTask(provider, {
+      modelSlug: 'seedream-5-pro',
+      mode: 'text',
+      prompt: 'x'.repeat(10),
+      aspectRatio: 'auto',
+    });
+    expect(lastInput().aspect_ratio).toBe('9:16');
+  });
 });
 
 describe('createTask — refus avant appel réseau', () => {

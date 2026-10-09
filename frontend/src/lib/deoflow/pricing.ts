@@ -42,6 +42,13 @@ export interface PriceContext {
    * montré.
    */
   params?: Record<string, string | boolean>;
+  /**
+   * Nombre d'images envoyées au fournisseur, visage d'avatar compris. Ne
+   * compte que chez les modèles qui facturent les images d'entrée — Seedream.
+   * Le serveur le tire des URLs reçues (`countImageInputs`), pas d'une
+   * déclaration du navigateur.
+   */
+  inputImages?: number;
 }
 
 /**
@@ -53,6 +60,11 @@ export interface PriceContext {
 type KieCost =
   /** Prix fixe par image. */
   | { kind: 'image'; credits: number }
+  /**
+   * Prix par image rendue, plus un supplément par image d'ENTRÉE au-delà des
+   * `freeImages` premières.
+   */
+  | { kind: 'imageWithInputs'; credits: number; perExtraImage: number; freeImages: number }
   /**
    * Prix fixe par clip — la durée est imposée — mais variable selon un
    * réglage choisi par le créateur (la définition, chez Veo).
@@ -91,6 +103,11 @@ const KIE_COSTS: Record<string, KieCost> = {
   // 6 crédits en 1K : moins cher que Nano Banana, ce que l'ancienne grille
   // ignorait en le facturant deux fois plus.
   'gpt-image-2': { kind: 'image', credits: 6 },
+  // 7 crédits en 1K (14 en 2K — nous verrouillons le 1K, voir `LOCKED` dans
+  // `lib/server/ai/kie.ts`), même tarif en texte seul et à partir d'images.
+  // Chaque image d'entrée au-delà de la première : 0,5 crédit. Relevé sur la
+  // fiche kie.ai du modèle le 09/10/2026.
+  'seedream-5-pro': { kind: 'imageWithInputs', credits: 7, perExtraImage: 0.5, freeImages: 1 },
   // Mode **Lite** (`model: 'veo3_lite'`), facturé au clip quelle que soit sa
   // durée. Fast coûterait 60 et Quality 250 — voir la note en bas de fichier.
   'veo-3-1': {
@@ -121,6 +138,10 @@ export function kieCost(slug: string, ctx: PriceContext = {}): number | null {
   switch (cost.kind) {
     case 'image':
       return cost.credits;
+    case 'imageWithInputs':
+      return (
+        cost.credits + cost.perExtraImage * Math.max(0, (ctx.inputImages ?? 0) - cost.freeImages)
+      );
     case 'clip': {
       const chosen = ctx.params?.[cost.key];
       const key = typeof chosen === 'string' && chosen in cost.credits ? chosen : cost.fallback;

@@ -4,6 +4,7 @@ import {
   MODEL_CAPABILITIES,
   alwaysRequires,
   capabilitiesFor,
+  countImageInputs,
   defaultParams,
   durationDrivingSlots,
   durationLabel,
@@ -239,5 +240,26 @@ describe('limite de longueur du prompt', () => {
 
   it('ne bloque rien sur un modèle inconnu — le refus vient alors d’ailleurs', () => {
     expect(promptOverflow('modele-fantome', 'a'.repeat(100_000))).toBe(0);
+  });
+});
+
+describe('comptage des images d’entrée', () => {
+  const slots = effectiveSlots(modeFor('seedream-5-pro', 'image'));
+
+  it('compte les images des emplacements d’image, et seulement elles', () => {
+    expect(countImageInputs(slots, () => 3)).toBe(3);
+    const video = effectiveSlots(modeFor('minimax-h3', 'references'));
+    // Image, vidéo et son : seules les 2 images comptent.
+    expect(countImageInputs(video, (key) => (key === 'reference_image_urls' ? 2 : 1))).toBe(2);
+  });
+
+  it('plafonne au maximum de l’emplacement — ce qui dépasse n’est pas envoyé', () => {
+    // `buildInput` tronque à `maxCount` : facturer au-delà ferait payer des
+    // images que le fournisseur ne reçoit jamais.
+    expect(countImageInputs(slots, () => 25)).toBe(10);
+  });
+
+  it('ne compte rien en mode texte', () => {
+    expect(countImageInputs(effectiveSlots(modeFor('seedream-5-pro', 'text')), () => 4)).toBe(0);
   });
 });

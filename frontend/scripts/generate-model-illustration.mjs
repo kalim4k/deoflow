@@ -62,6 +62,18 @@ const PROMPTS = {
     'Below the badge, the text "MINIMAX H3" in bold uppercase white sans-serif with wide letter spacing, crisp and perfectly legible.',
     'No other text anywhere in the image. No watermark, no logo, no signature.',
   ].join(' '),
+  'seedream-5-pro': [
+    STYLE.replace(
+      'Smooth diagonal gradient background',
+      'Smooth diagonal gradient background from deep royal blue on the left to warm golden yellow on the right.',
+    ),
+    // Même règle que MiniMax : un symbole abstrait, pas le logo de ByteDance.
+    // Le cadre et l'étincelle disent ce que fait le modèle — créer et retoucher
+    // des images.
+    'Inside the white circle badge: a simple flat icon of a rounded picture frame with a small four-pointed sparkle star at its top right corner, colored with the same blue-to-gold gradient.',
+    'Below the badge, the text "SEEDREAM 5.0 PRO" in bold uppercase white sans-serif with wide letter spacing, crisp and perfectly legible.',
+    'No other text anywhere in the image. No watermark, no logo, no signature.',
+  ].join(' '),
 };
 
 async function kie(url, init) {
