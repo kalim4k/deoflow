@@ -37,7 +37,7 @@ import {
   type ApiAvatar,
   type ApiGeneration,
 } from '@/lib/deoflow/api';
-import { composePrompt, enrichesPrompt } from '@/lib/deoflow/avatarPrompt';
+import { composePrompt, enrichesPrompt, sceneBudget } from '@/lib/deoflow/avatarPrompt';
 import { MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
 import { priceCredits } from '@/lib/deoflow/pricing';
 import { downloadUrl, generationFilename } from '@/lib/deoflow/download';
@@ -47,6 +47,7 @@ import {
   defaultParams,
   effectiveSlots,
   paramsFor,
+  promptOverflow,
   type ParamSpec,
   type ParamValues,
 } from '@/lib/deoflow/capabilities';
@@ -336,7 +337,13 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
 
   const insufficient = cost !== null && cost > credits;
   const promptRequired = caps?.promptRequirement !== 'optional';
-  const maxPrompt = Math.min(caps?.promptMaxLength ?? 2000, 2000);
+  // La vraie limite du modèle chez le fournisseur — de 2 500 caractères (Kling)
+  // à 30 000 (Seedance) — et non plus un plafond commun de 2 000. Un avatar en
+  // prend sa part : sa description part devant la scène, dans le même prompt.
+  const promptLimit = caps?.promptMaxLength ?? 2000;
+  const maxPrompt = sceneBudget(avatar, promptLimit);
+  // Ce que le serveur mesurera : le prompt ENVOYÉ, avatar compris.
+  const overflow = promptOverflow(model.slug, avatar ? composePrompt(avatar, prompt) : prompt);
   const modelParams = caps ? paramsFor(caps, mode) : [];
 
   /* ── Largeur des réglages courts ──────────────────────────────────── */
@@ -369,6 +376,14 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
   /** Ce qui empêche de lancer, formulé pour être affiché tel quel. */
   const blocker: string | null = (() => {
     if (promptRequired && prompt.trim().length === 0) return 'Décrivez ce que vous voulez générer.';
+    if (overflow > 0) {
+      if (avatar && maxPrompt === 0) {
+        return `La description de ${avatar.name} dépasse à elle seule la limite de ${model.name} (${promptLimit} caractères). Raccourcissez-la, ou choisissez un autre modèle.`;
+      }
+      const s = overflow > 1 ? 's' : '';
+      const withAvatar = avatar ? `, description de ${avatar.name} comprise` : '';
+      return `Description trop longue de ${overflow} caractère${s} pour ${model.name}${withAvatar}.`;
+    }
 
     for (const slot of slots) {
       if (slot.requirement === 'required' && (media.bySlot[slot.key] ?? []).length === 0) {

@@ -40,6 +40,19 @@ export function composePrompt(
 }
 
 /**
+ * Place laissée à la scène sur une limite de `limit` caractères, une fois la
+ * description de l'avatar placée devant elle.
+ *
+ * Calculée PAR `composePrompt` plutôt que recomptée à la main : la ponctuation
+ * ajoutée et l'espace de séparation y sont décidés, et un second calcul
+ * finirait par diverger du premier.
+ */
+export function sceneBudget(avatar: AvatarPromptSource | null | undefined, limit: number): number {
+  const overhead = composePrompt(avatar, 'x').length - 1;
+  return Math.max(0, limit - overhead);
+}
+
+/**
  * Vrai quand la description de l'avatar ajoutera réellement quelque chose.
  * L'atelier s'en sert pour n'afficher le prompt composé que s'il diffère.
  */

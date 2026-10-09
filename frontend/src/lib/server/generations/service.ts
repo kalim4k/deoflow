@@ -42,6 +42,7 @@ import {
   effectiveSlots,
   minBillableSeconds,
   modeFor,
+  promptOverflow,
   type ParamValues,
 } from '@/lib/deoflow/capabilities';
 import { composePrompt } from '@/lib/deoflow/avatarPrompt';
@@ -303,6 +304,17 @@ export async function createGeneration(input: CreateGenerationInput): Promise<Ge
         media: withAvatarFace(input, avatar),
       }
     : input;
+
+  // Mesuré APRÈS l'ajout de la description de l'avatar : c'est ce texte-là que
+  // le fournisseur reçoit. Au-delà de sa limite, il refuse la tâche — et ce
+  // refus arriverait après le débit.
+  const overflow = promptOverflow(withAvatar.modelSlug, withAvatar.prompt);
+  if (overflow > 0) {
+    throw new GenerationRequestError(
+      'PROMPT_TOO_LONG',
+      `Description trop longue de ${overflow} caractère${overflow > 1 ? 's' : ''} pour ce modèle.`,
+    );
+  }
 
   assertMediaComplete(withAvatar);
   const { credits, durationSeconds } = quoteGeneration(withAvatar);

@@ -12,6 +12,7 @@ import {
   minBillableSeconds,
   modeFor,
   paramsFor,
+  promptOverflow,
 } from './capabilities';
 
 describe('couverture du catalogue', () => {
@@ -217,5 +218,26 @@ describe('résumé des entrées', () => {
 
   it('ne se casse pas sur un modèle inconnu', () => {
     expect(inputSummary('modele-fantome', 'image')).toBe('Texte');
+  });
+});
+
+describe('limite de longueur du prompt', () => {
+  it('mesure chaque modèle à SA limite, pas à un plafond commun', () => {
+    // Le plafond unique de 2 000 caractères bridait Seedance (30 000) comme
+    // Kling (2 500). Chaque modèle se mesure désormais à son propre fournisseur.
+    expect(promptOverflow('kling-2-6', 'a'.repeat(2500))).toBe(0);
+    expect(promptOverflow('kling-2-6', 'a'.repeat(2501))).toBe(1);
+    expect(promptOverflow('seedance-2-5', 'a'.repeat(30_000))).toBe(0);
+    expect(promptOverflow('veo-3-1', 'a'.repeat(5_010))).toBe(10);
+  });
+
+  it('laisse chaque modèle vendu dépasser l’ancien plafond de 2 000', () => {
+    for (const m of AI_MODELS.filter((x) => x.active)) {
+      expect(capabilitiesFor(m.slug)?.promptMaxLength, m.slug).toBeGreaterThan(2000);
+    }
+  });
+
+  it('ne bloque rien sur un modèle inconnu — le refus vient alors d’ailleurs', () => {
+    expect(promptOverflow('modele-fantome', 'a'.repeat(100_000))).toBe(0);
   });
 });

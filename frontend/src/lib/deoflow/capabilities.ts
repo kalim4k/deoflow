@@ -675,6 +675,19 @@ export function acceptsAvatar(slug: string): boolean {
   return characterRefFor(slug) !== null;
 }
 
+/**
+ * Caractères en trop dans un prompt pour ce modèle — 0 s'il tient.
+ *
+ * À mesurer sur le prompt ENVOYÉ, description de l'avatar comprise : c'est lui
+ * que le fournisseur reçoit, et au-delà de sa limite il refuse la tâche — après
+ * le débit du créateur. Partagé navigateur et serveur, pour que l'atelier
+ * bloque exactement ce que le serveur refuserait.
+ */
+export function promptOverflow(slug: string, prompt: string): number {
+  const limit = capabilitiesFor(slug)?.promptMaxLength;
+  return limit === undefined ? 0 : Math.max(0, prompt.length - limit);
+}
+
 /** Paramètres applicables : ceux du modèle, puis ceux du mode. */
 export function paramsFor(caps: ModelCapabilities, mode: ModelMode | undefined): ParamSpec[] {
   return [...caps.params, ...(mode?.params ?? [])];

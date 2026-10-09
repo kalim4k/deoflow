@@ -102,6 +102,7 @@ const MESSAGES: Record<string, string> = {
   MODE_UNKNOWN: 'Ce mode n’existe pas pour ce modèle.',
   MEDIA_REQUIRED: 'Il manque un fichier obligatoire.',
   MEDIA_TOO_MANY: 'Trop de fichiers pour cet emplacement.',
+  PROMPT_TOO_LONG: 'Description trop longue pour ce modèle.',
   MEDIA_URL_INVALID: 'Un des fichiers n’est pas accessible.',
   PROVIDER_NOT_CONFIGURED: 'La génération n’est pas configurée sur cette instance.',
   PROVIDER_UNAVAILABLE: 'Le service de génération est momentanément indisponible. Réessayez.',

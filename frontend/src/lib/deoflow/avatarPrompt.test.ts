@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composePrompt, enrichesPrompt } from './avatarPrompt';
+import { composePrompt, enrichesPrompt, sceneBudget } from './avatarPrompt';
 
 const AWA = {
   name: 'Awa',
@@ -56,5 +56,26 @@ describe('enrichesPrompt', () => {
     [undefined, false],
   ])('%#', (avatar, expected) => {
     expect(enrichesPrompt(avatar)).toBe(expected);
+  });
+});
+
+describe('place laissée à la scène', () => {
+  it('rend toute la limite quand aucun avatar n’est joint', () => {
+    expect(sceneBudget(null, 5000)).toBe(5000);
+    expect(sceneBudget({ name: 'Vide', description: '   ' }, 5000)).toBe(5000);
+  });
+
+  it('retranche exactement ce que `composePrompt` ajoute devant la scène', () => {
+    // La description, son point final, puis une espace. Si le budget comptait
+    // un caractère de moins que la composition réelle, le champ laisserait
+    // taper un prompt que le serveur refuserait.
+    const limit = 500;
+    const budget = sceneBudget(AWA, limit);
+    const scene = 'x'.repeat(budget);
+    expect(composePrompt(AWA, scene)).toHaveLength(limit);
+  });
+
+  it('ne descend pas sous zéro quand la description dépasse à elle seule la limite', () => {
+    expect(sceneBudget({ name: 'Longue', description: 'a'.repeat(3000) }, 2500)).toBe(0);
   });
 });
