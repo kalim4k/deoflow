@@ -42,6 +42,7 @@ import { MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
 import { priceCredits } from '@/lib/deoflow/pricing';
 import { downloadUrl, generationFilename } from '@/lib/deoflow/download';
 import {
+  billedMediaSeconds,
   capabilitiesFor,
   characterRefFor,
   countImageInputs,
@@ -306,9 +307,12 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
   })();
 
   /** `null` = pas encore connue (le fichier qui la porte manque). */
+  // L'arrondi suit la règle du modèle (`billedMediaSeconds`), la même que le
+  // serveur : Kling facture la seconde entamée, Replace coupe à la seconde
+  // pleine.
   const durationSeconds: number | null =
     measured !== null
-      ? Math.ceil(measured)
+      ? billedMediaSeconds(model.slug, measured)
       : durationSpec.kind === 'none'
         ? null
         : durationSpec.kind === 'fixed'
@@ -586,9 +590,11 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
               rows={4}
               maxLength={maxPrompt}
               placeholder={
-                kind === 'video'
-                  ? 'Décrivez le mouvement, le cadrage, l’ambiance…'
-                  : 'Décrivez le personnage, la lumière, le décor…'
+                caps?.composition === 'replace'
+                  ? 'Facultatif — une précision : « elle sourit davantage », « sans le sac »…'
+                  : kind === 'video'
+                    ? 'Décrivez le mouvement, le cadrage, l’ambiance…'
+                    : 'Décrivez le personnage, la lumière, le décor…'
               }
               hint="Le français et l’anglais fonctionnent aussi bien."
               value={prompt}
@@ -600,7 +606,17 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
                 corriger quand le résultat déçoit — et le créateur a payé pour
                 ce résultat. Affiché seulement quand l'avatar ajoute vraiment
                 quelque chose, sinon c'est un doublon du champ ci-dessus. */}
-            {avatar && enrichesPrompt(avatar) && (
+            {/* Replace : le texte n'est pas le prompt, il s'insère dans le
+                gabarit du serveur. Afficher un « prompt envoyé » serait faux ;
+                on dit plutôt ce qui est repris d'où. */}
+            {caps?.composition === 'replace' && (
+              <p className="rounded-xl bg-sunken p-3 text-xs leading-relaxed text-ink-500">
+                Les gestes, la caméra, le décor et le son viennent de votre vidéo ; le visage, la
+                coiffure et la tenue, de votre personnage. Deoflow analyse le mouvement de la vidéo
+                pour que le personnage le suive au plus près — votre texte vient s’y ajouter.
+              </p>
+            )}
+            {caps?.composition !== 'replace' && avatar && enrichesPrompt(avatar) && (
               <div className="rounded-xl bg-sunken p-3">
                 <p className="text-xs font-medium text-ink-500">
                   Envoyé au modèle, description de {avatar.name} comprise :
@@ -747,7 +763,9 @@ export function GenerationStudio({ kind, model }: { kind: MediaKind; model: AiMo
               <p className="text-sm text-ink-500">
                 {measured === null
                   ? 'Elle sera celle de votre vidéo de référence — ajoutez-la pour connaître le coût.'
-                  : `${formatSeconds(measured)} — reprise de votre vidéo de référence, facturée ${durationSeconds} secondes.`}
+                  : durationSpec.rounding === 'down'
+                    ? `${formatSeconds(measured)} — votre vidéo est reprise sur ses ${durationSeconds} premières secondes, et le résultat dure autant.`
+                    : `${formatSeconds(measured)} — reprise de votre vidéo de référence, facturée ${durationSeconds} secondes.`}
               </p>
             </Section>
           )}

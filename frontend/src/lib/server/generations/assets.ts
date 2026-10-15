@@ -14,7 +14,7 @@
  */
 import 'server-only';
 import { log } from '@/lib/server/observability/log';
-import { uploadBuffer } from '@/lib/server/upload/cloudinary-client';
+import { uploadBuffer, type UploadResult } from '@/lib/server/upload/cloudinary-client';
 
 /** Au-delà, on refuse de charger en mémoire plutôt que de faire tomber la fonction. */
 const MAX_ASSET_BYTES = Number(process.env.GENERATION_MAX_ASSET_BYTES ?? 200 * 1024 * 1024);
@@ -58,8 +58,11 @@ async function fetchAsset(url: string): Promise<{ buffer: Buffer; contentType: s
 export async function copyResultsToStorage(
   urls: string[],
   keyPrefix: string,
-): Promise<{ stored: string[]; failures: number }> {
+): Promise<{ stored: string[]; uploads: UploadResult[]; failures: number }> {
   const stored: string[] = [];
+  // Le détail de chaque envoi (identifiant, durée mesurée) : Replace en a
+  // besoin pour recaler le rendu, sans relire la ressource chez Cloudinary.
+  const uploads: UploadResult[] = [];
   let failures = 0;
 
   for (const [index, url] of urls.entries()) {
@@ -67,6 +70,7 @@ export async function copyResultsToStorage(
       const { buffer, contentType } = await fetchAsset(url);
       const uploaded = await uploadBuffer(`${keyPrefix}/${index}`, buffer, contentType);
       stored.push(uploaded.secureUrl);
+      uploads.push(uploaded);
     } catch (err) {
       failures += 1;
       log.error('generation: recopie du résultat impossible', {
@@ -76,5 +80,5 @@ export async function copyResultsToStorage(
     }
   }
 
-  return { stored, failures };
+  return { stored, uploads, failures };
 }

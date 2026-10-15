@@ -270,6 +270,8 @@ function csrfToken(): string | null {
  * dès qu'une génération part d'un fichier.
  */
 export async function uploadReference(file: File): Promise<string> {
+  if (file.size > DIRECT_UPLOAD_THRESHOLD) return uploadDirect(file);
+
   const first = await postFile(file);
   if (first.status !== 401) return unwrap(first);
 
@@ -302,6 +304,59 @@ async function postFile(file: File): Promise<Response> {
     credentials: 'include',
     ...(token ? { headers: { 'x-csrf-token': token } } : {}),
   });
+}
+
+/**
+ * Au-delà, le fichier part directement chez Cloudinary : Vercel refuse tout
+ * corps de requête de plus de 4,5 Mo, et l'enveloppe multipart en ajoute un
+ * peu. En dessous, la route classique reste la voie — elle contrôle les
+ * octets elle-même.
+ */
+const DIRECT_UPLOAD_THRESHOLD = 4_000_000;
+
+/**
+ * Envoi direct : signature, envoi à Cloudinary, enregistrement.
+ * Le détail des contrôles est côté serveur (`lib/server/upload/direct.ts`).
+ */
+async function uploadDirect(file: File): Promise<string> {
+  // `api()` porte le CSRF et renouvelle la session : les deux appels à notre
+  // serveur passent par lui. Seul l'envoi à Cloudinary se fait sans.
+  const signed = await api<{ uploadUrl: string; fields: Record<string, string> }>(
+    '/api/generations/upload/sign',
+    { method: 'POST', body: { mimeType: file.type, sizeBytes: file.size } },
+  );
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(signed.fields)) form.append(key, value);
+  form.append('file', file);
+
+  let res: Response;
+  try {
+    res = await fetch(signed.uploadUrl, { method: 'POST', body: form });
+  } catch {
+    throw new ApiError(0, 'L’envoi a été interrompu. Vérifiez votre connexion et réessayez.', {});
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+    // Cloudinary refuse en 400 un fichier qui ne se décode pas, ou dont le
+    // format réel n'est pas celui annoncé.
+    throw new ApiError(
+      res.status,
+      res.status === 400
+        ? 'Ce fichier est illisible ou ne correspond pas à son format.'
+        : 'L’envoi a échoué.',
+      {
+        error: res.status === 400 ? 'INVALID_FILE_CONTENT' : 'UPLOAD_FAILED',
+        detail: body.error?.message,
+      },
+    );
+  }
+
+  const done = await api<{ url: string }>('/api/generations/upload/complete', {
+    method: 'POST',
+    body: { publicId: signed.fields.public_id, mimeType: file.type, filename: file.name },
+  });
+  return done.url;
 }
 
 async function unwrap(res: Response): Promise<string> {

@@ -74,6 +74,16 @@ const PROMPTS = {
     'Below the badge, the text "SEEDREAM 5.0 PRO" in bold uppercase white sans-serif with wide letter spacing, crisp and perfectly legible.',
     'No other text anywhere in the image. No watermark, no logo, no signature.',
   ].join(' '),
+  replace: [
+    STYLE.replace(
+      'Smooth diagonal gradient background',
+      'Smooth diagonal gradient background from deep teal on the left to warm coral pink on the right.',
+    ),
+    // Ce que fait la fonction : une silhouette qui en remplace une autre.
+    'Inside the white circle badge: a simple flat icon of two overlapping person silhouettes (head and shoulders) with a circular two-arrow swap symbol around them, colored with the same teal-to-coral gradient.',
+    'Below the badge, the text "REPLACE" in bold uppercase white sans-serif with wide letter spacing, crisp and perfectly legible.',
+    'No other text anywhere in the image. No watermark, no logo, no signature.',
+  ].join(' '),
 };
 
 async function kie(url, init) {

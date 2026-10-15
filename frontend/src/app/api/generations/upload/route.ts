@@ -31,20 +31,7 @@ import { prisma } from '@/lib/server/prisma';
 import { StorageNotConfiguredError, uploadBuffer } from '@/lib/server/upload/cloudinary-client';
 import { sanitizeFilename } from '@/lib/server/upload/sanitize-filename';
 import { verifyMagicBytes } from '@/lib/server/upload/sniff';
-import { MODEL_CAPABILITIES } from '@/lib/deoflow/capabilities';
-
-/** Union des types acceptés par au moins un emplacement du catalogue. */
-function acceptedMimeTypes(): Set<string> {
-  const types = new Set<string>();
-  for (const caps of Object.values(MODEL_CAPABILITIES)) {
-    for (const mode of caps.modes) {
-      for (const slot of mode.slots) {
-        for (const mime of slot.accept) types.add(mime);
-      }
-    }
-  }
-  return types;
-}
+import { acceptedGenerationMimes, generationUploadMaxBytes } from '@/lib/server/upload/direct';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const ctx = makeRequestContext(req.headers);
@@ -66,10 +53,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const maxBytes = Number.parseInt(
-      process.env.GENERATION_UPLOAD_MAX_BYTES ?? String(200 * 1024 * 1024),
-      10,
-    );
+    const maxBytes = generationUploadMaxBytes();
 
     const form = await req.formData();
     const file = form.get('file');
@@ -87,7 +71,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       );
     }
 
-    if (!acceptedMimeTypes().has(file.type)) {
+    if (!acceptedGenerationMimes().has(file.type)) {
       return NextResponse.json(
         { error: 'INVALID_MIME', message: `Format non accepté : ${file.type || 'inconnu'}` },
         { status: 415, headers: { 'x-request-id': ctx.requestId } },

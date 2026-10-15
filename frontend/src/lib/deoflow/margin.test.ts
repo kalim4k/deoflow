@@ -1,17 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { AI_MODELS } from './catalog';
 import { CREDIT_PACKS, pricePerCredit } from './packs';
-import { CREDIT_FCFA, MARGIN, hasVideoInput, kieCost, priceCredits } from './pricing';
+import {
+  CREDIT_FCFA,
+  MARGIN,
+  MODEL_MARGINS,
+  hasVideoInput,
+  kieCost,
+  marginFor,
+  priceCredits,
+} from './pricing';
 import { REFERENCE_VIDEO_MAX_SECONDS, capabilitiesFor, minBillableSeconds } from './capabilities';
 
 /**
  * Ce fichier protège la marge, pas le code.
  *
  * Le crédit Deoflow vaut le crédit kie.ai : ce qu'on vend 3 crédits nous en
- * coûte 1. L'égalité tient tant que deux choses restent vraies — le crédit
- * s'achète au même prix qu'à la source, et chaque génération se facture
- * exactement `MARGIN` fois son coût. Les deux dérivent sans bruit dès qu'on
- * touche une grille ; ces tests les tiennent.
+ * coûte 1 (2 chez Replace). L'égalité tient tant que deux choses restent
+ * vraies — le crédit s'achète au même prix qu'à la source, et chaque
+ * génération se facture exactement la marge de son modèle (`marginFor`). Les
+ * deux dérivent sans bruit dès qu'on touche une grille ; ces tests les
+ * tiennent.
  */
 describe('valeur du crédit', () => {
   it('s’achète au tarif de kie.ai : 1000 crédits pour 3000 FCFA', () => {
@@ -41,16 +50,25 @@ describe('prix de vente', () => {
   const seconds = 10;
 
   it.each(AI_MODELS.filter((m) => m.active).map((m) => m.slug))(
-    '%s se vend exactement %s fois son coût',
+    '%s se vend exactement sa marge fois son coût',
     (slug) => {
       for (const withVideo of [false, true]) {
         const cost = kieCost(slug, { seconds, hasVideoInput: withVideo });
         const price = priceCredits(slug, { seconds, hasVideoInput: withVideo });
         expect(cost, `${slug} sans coût déclaré`).not.toBeNull();
-        expect(price).toBe(Math.ceil(cost! * MARGIN));
+        expect(price).toBe(Math.ceil(cost! * marginFor(slug)));
       }
     },
   );
+
+  it('seul Replace échappe à la marge commune, à ×2', () => {
+    // Décision du propriétaire, 15/10/2026. Une marge d'exception change ce
+    // que gagne chaque génération : elle ne s'ajoute pas par mégarde.
+    expect(MODEL_MARGINS).toEqual({ replace: 2 });
+    for (const m of AI_MODELS.filter((x) => x.slug !== 'replace')) {
+      expect(marginFor(m.slug), m.slug).toBe(MARGIN);
+    }
+  });
 
   it('refuse de deviner le prix d’un modèle inconnu', () => {
     // Renvoyer 0 ferait une génération gratuite ; renvoyer une valeur par
@@ -132,6 +150,20 @@ describe('facturation propre à chaque fournisseur', () => {
     expect(kieCost('seedream-5-pro', { inputImages: 10 })).toBe(11.5);
     expect(priceCredits('seedream-5-pro', { inputImages: 2 })).toBe(23);
     expect(priceCredits('seedream-5-pro', { inputImages: 10 })).toBe(35);
+  });
+
+  it('facture Replace sur la vidéo d’entrée ET le rendu, de même durée', () => {
+    // 8 crédits la seconde (768P), deux fois : la source est coupée par le
+    // serveur à la durée du rendu, donc elle pèse exactement autant. Plus
+    // 0,5 pour l'analyse Gemini. 6 s → 96,5 → 193 crédits Deoflow (×2).
+    expect(kieCost('replace', { seconds: 6 })).toBe(96.5);
+    expect(priceCredits('replace', { seconds: 4 })).toBe(129);
+    expect(priceCredits('replace', { seconds: 6 })).toBe(193);
+    expect(priceCredits('replace', { seconds: 15 })).toBe(481);
+    // Bien moins cher que Seedance avec une vidéo, l'alternative envisagée.
+    expect(kieCost('replace', { seconds: 10 })!).toBeLessThan(
+      kieCost('seedance-2-5', { seconds: 10, hasVideoInput: true })!,
+    );
   });
 
   it('n’applique ce supplément qu’aux modèles qui le facturent', () => {

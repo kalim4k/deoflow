@@ -20,8 +20,9 @@
  *      l'autre ferait diverger deux écrans censés dire la même chose.
  */
 import 'server-only';
-import type { PrismaClient } from '@prisma/client';
-import { CREDIT_FCFA, MARGIN } from '@/lib/deoflow/pricing';
+import type { Prisma, PrismaClient } from '@prisma/client';
+import { AI_MODELS } from '@/lib/deoflow/catalog';
+import { CREDIT_FCFA, MARGIN, MODEL_MARGINS } from '@/lib/deoflow/pricing';
 
 export const STATS_PERIODS = ['7d', '30d', 'all'] as const;
 export type StatsPreset = (typeof STATS_PERIODS)[number];
@@ -126,6 +127,12 @@ export function resolveStatsRange(
   return { period: preset, since: periodStart(preset, now), until: null };
 }
 
+/** Crédits consommés sur un modèle vendu à sa propre marge (`MODEL_MARGINS`). */
+export interface OwnMarginConsumption {
+  credits: number;
+  margin: number;
+}
+
 /**
  * Coût fournisseur, en FCFA, de crédits consommés chez nous.
  *
@@ -133,9 +140,37 @@ export function resolveStatsRange(
  * au même tarif que le nôtre (`CREDIT_FCFA`). Le calcul passe donc par les deux
  * constantes plutôt que par le facteur 1 qu'elles donnent aujourd'hui : le jour
  * où la marge bouge, la marge affichée doit bouger avec elle.
+ *
+ * Les modèles vendus à leur propre marge sont comptés à part, à `1/marge` :
+ * un crédit Replace (×2) coûte 0,5 crédit kie.ai, pas 0,33.
  */
-export function providerCostFcfa(creditsConsumed: number): number {
-  return Math.round((creditsConsumed / MARGIN) * CREDIT_FCFA);
+export function providerCostFcfa(
+  creditsConsumed: number,
+  ownMargins: OwnMarginConsumption[] = [],
+): number {
+  const apart = ownMargins.reduce((acc, c) => acc + c.credits, 0);
+  const kieCredits =
+    Math.max(0, creditsConsumed - apart) / MARGIN +
+    ownMargins.reduce((acc, c) => acc + c.credits / c.margin, 0);
+  return Math.round(kieCredits * CREDIT_FCFA);
+}
+
+const OWN_MARGINS = Object.entries(MODEL_MARGINS);
+
+/**
+ * Débits d'un modèle : par sa génération quand elle existe encore, sinon par
+ * le libellé posé au débit (« Replace — 6 s »). Un créateur peut supprimer une
+ * génération de sa galerie — `generationId` passe alors à null — mais kie.ai
+ * l'a facturée quand même.
+ */
+function debitsOf(slug: string): Prisma.CreditTransactionWhereInput {
+  const name = AI_MODELS.find((m) => m.slug === slug)?.name ?? slug;
+  return {
+    OR: [
+      { generation: { modelSlug: slug } },
+      { generationId: null, label: { startsWith: `${name} — ` } },
+    ],
+  };
 }
 
 export interface AdminStats {
@@ -231,6 +266,7 @@ export async function computeAdminStats(
     withdrawalRows,
     commissionSum,
     referralCount,
+    ownMarginSums,
   ] = await Promise.all([
     prisma.order.aggregate({
       where: { status: 'PAID', ...(inPeriod ? { paidAt: inPeriod } : {}) },
@@ -266,6 +302,19 @@ export async function computeAdminStats(
       _sum: { amount: true },
     }),
     prisma.user.count({ where: { referredById: { not: null } } }),
+    // Une requête par modèle vendu à sa propre marge — Replace seul aujourd'hui.
+    Promise.all(
+      OWN_MARGINS.map(([slug]) =>
+        prisma.creditTransaction.aggregate({
+          where: {
+            movement: 'GENERATION',
+            ...debitsOf(slug),
+            ...(inPeriod ? { createdAt: inPeriod } : {}),
+          },
+          _sum: { credits: true },
+        }),
+      ),
+    ),
   ]);
 
   const byMovement = (name: string): number =>
@@ -290,7 +339,13 @@ export async function computeAdminStats(
   const pending = withdrawalBy('PENDING');
 
   const grossFcfa = sum(orders._sum.amount);
-  const cost = providerCostFcfa(consumed);
+  const cost = providerCostFcfa(
+    consumed,
+    OWN_MARGINS.map(([, margin], i) => ({
+      credits: Math.abs(sum(ownMarginSums[i]?._sum.credits)),
+      margin,
+    })),
+  );
 
   return {
     period,

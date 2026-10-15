@@ -289,6 +289,30 @@ describe('createTask — construction de la requête', () => {
     expect(lastInput().image_urls).toEqual(photos);
   });
 
+  it('envoie Replace à MiniMax H3 avec la durée, le format et le 768P', async () => {
+    // Replace suit la durée de la vidéo (`fromMedia`) — mais MiniMax EXIGE
+    // `duration` : sans `forward`, elle partait absente et la tâche était
+    // refusée après débit.
+    const video = ['https://res.cloudinary.com/x/video/upload/du_6/v1/references/u/a.mp4'];
+    const face = ['https://res.cloudinary.com/x/image/upload/v1/references/u/b.png'];
+    await createTask(provider, {
+      modelSlug: 'replace',
+      mode: 'replace',
+      prompt: 'TASK: character replacement…',
+      aspectRatio: '9:16',
+      durationSeconds: 6,
+      media: { reference_video_urls: video, reference_image_urls: face },
+    });
+    expect(lastBody().model).toBe('minimax-h3/reference-to-video');
+    expect(lastInput()).toMatchObject({
+      duration: 6,
+      aspect_ratio: '9:16',
+      resolution: '768P',
+      reference_video_urls: video,
+      reference_image_urls: face,
+    });
+  });
+
   it('verrouille Seedream en 1K et filtre le contenu sur les deux endpoints', async () => {
     for (const mode of ['text', 'image'] as const) {
       await createTask(provider, {

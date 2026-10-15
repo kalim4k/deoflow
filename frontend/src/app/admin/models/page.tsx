@@ -21,16 +21,21 @@ import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
 import { TableShell, Td, Th, Tr } from '@/components/ui/Table';
 import { Badge, StatusBadge } from '@/components/ui/Feedback';
 import { AI_MODELS, MODEL_TRAIT_LABELS } from '@/lib/deoflow/catalog';
-import { CREDIT_FCFA, MARGIN, kieCost, startingPrice } from '@/lib/deoflow/pricing';
+import { CREDIT_FCFA, MARGIN, kieCost, marginFor, startingPrice } from '@/lib/deoflow/pricing';
 import { minBillableSeconds } from '@/lib/deoflow/capabilities';
 import { formatAmount } from '@/lib/format';
+
+/** « Replace ×2 » — les modèles vendus à une autre marge que la commune. */
+const MARGIN_EXCEPTIONS = AI_MODELS.filter((m) => marginFor(m.slug) !== MARGIN)
+  .map((m) => `${m.name} ×${marginFor(m.slug)}`)
+  .join(', ');
 
 export default function AdminModelsPage() {
   return (
     <>
       <AdminPageHeader
         title="Modèles IA"
-        description={`Coût fournisseur, prix de vente (×${MARGIN}) et marge, modèle par modèle.`}
+        description={`Coût fournisseur, prix de vente (×${MARGIN}${MARGIN_EXCEPTIONS ? `, sauf ${MARGIN_EXCEPTIONS}` : ''}) et marge, modèle par modèle.`}
       />
 
       <TableShell>
@@ -52,6 +57,7 @@ export default function AdminModelsPage() {
             const seconds = minBillableSeconds(m.slug);
             const cost = kieCost(m.slug, { seconds, hasVideoInput: false });
             const price = startingPrice(m.slug, seconds);
+            const margin = marginFor(m.slug);
             const unit = m.kind === 'video' ? ` (${seconds} s)` : '';
             // Marge en FCFA plutôt qu'en crédits : c'est l'unité dans laquelle
             // on encaisse et dans laquelle on paie kie.ai. En crédits, l'écart
@@ -77,6 +83,7 @@ export default function AdminModelsPage() {
                 <Td className="text-right font-medium whitespace-nowrap text-ink-900">
                   {price ?? '—'} cr.
                   <span className="text-ink-300">{unit}</span>
+                  {margin !== MARGIN && <span className="ml-1 text-ink-500">×{margin}</span>}
                 </Td>
                 <Td className="text-right font-display whitespace-nowrap tabular-nums text-gain-600">
                   {marginFcfa !== null ? formatAmount(marginFcfa) : '—'}
@@ -92,10 +99,11 @@ export default function AdminModelsPage() {
 
       <p className="mt-4 max-w-2xl text-sm text-ink-500">
         Cet écran est en lecture seule, et c’est délibéré. Les prix ne se saisissent pas : ils
-        valent {MARGIN} fois le coût kie.ai, arrondi au crédit supérieur. Un tarif fournisseur qui
-        change se corrige dans <code className="font-mono text-xs">pricing.ts</code>, et toute la
-        grille suit — y compris ce que voient les créateurs. Retirer un modèle du catalogue se fait
-        de la même façon, par déploiement.
+        valent {MARGIN} fois le coût kie.ai{MARGIN_EXCEPTIONS && ` (sauf ${MARGIN_EXCEPTIONS})`},
+        arrondi au crédit supérieur. Un tarif fournisseur qui change se corrige dans{' '}
+        <code className="font-mono text-xs">pricing.ts</code>, et toute la grille suit — y compris
+        ce que voient les créateurs. Retirer un modèle du catalogue se fait de la même façon, par
+        déploiement.
       </p>
     </>
   );

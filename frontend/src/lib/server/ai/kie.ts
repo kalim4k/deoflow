@@ -129,6 +129,10 @@ const ENDPOINTS: Record<string, Pick<ModelBinding, 'id' | 'family' | 'kind' | 'm
   'seedance-2-5': { id: 'bytedance/seedance-2-5', family: 'jobs', kind: 'video' },
   'gemini-omni-flash': { id: 'gemini-omni-video', family: 'jobs', kind: 'video' },
   'minimax-h3': { id: 'minimax-h3/reference-to-video', family: 'jobs', kind: 'video' },
+  // Même modèle, autre contrat d'entrée : voir `replace` dans `capabilities.ts`.
+  // `LOCKED` et `DEFAULT_RATIO` étant indexés par identifiant kie.ai, le 768P
+  // imposé à `minimax-h3` s'applique ici sans rien recopier.
+  replace: { id: 'minimax-h3/reference-to-video', family: 'jobs', kind: 'video' },
 };
 
 /**
@@ -267,7 +271,11 @@ function buildInput(
   const fallbackRatio = DEFAULT_RATIO[binding.id];
   if (ratio ?? fallbackRatio) input.aspect_ratio = ratio ?? fallbackRatio;
 
-  if (caps.duration.kind === 'choice' || caps.duration.kind === 'range') {
+  if (
+    caps.duration.kind === 'choice' ||
+    caps.duration.kind === 'range' ||
+    (caps.duration.kind === 'fromMedia' && caps.duration.forward)
+  ) {
     const seconds = req.durationSeconds ?? minBillableSeconds(req.modelSlug);
     // Gemini attend une chaîne, Seedance un nombre. Se tromper de type est
     // refusé côté fournisseur.

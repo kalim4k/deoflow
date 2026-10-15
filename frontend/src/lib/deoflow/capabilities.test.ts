@@ -3,6 +3,7 @@ import { AI_MODELS } from './catalog';
 import {
   MODEL_CAPABILITIES,
   alwaysRequires,
+  billedMediaSeconds,
   capabilitiesFor,
   countImageInputs,
   defaultParams,
@@ -85,12 +86,34 @@ describe('emplacements de fichiers', () => {
 
   it('laisse toujours une porte d’entrée sans fichier, sauf transfert de mouvement', () => {
     // Un modèle qui exige un média dans TOUS ses modes est un cas particulier
-    // assumé (Kling). Si un autre le devenait par accident, le créateur se
-    // retrouverait bloqué sur un écran sans savoir pourquoi.
+    // assumé (Kling, Replace : tous deux transforment une vidéo existante en y
+    // mettant un personnage — sans l'une ou l'autre, il n'y a rien à faire).
+    // Si un autre le devenait par accident, le créateur se retrouverait bloqué
+    // sur un écran sans savoir pourquoi.
     const blocked = AI_MODELS.filter(
       (m) => alwaysRequires(m.slug, 'image') || alwaysRequires(m.slug, 'video'),
     ).map((m) => m.slug);
-    expect(blocked).toEqual(['kling-2-6']);
+    expect(blocked).toEqual(['kling-2-6', 'replace']);
+  });
+
+  it('arrondit la durée mesurée selon le modèle', () => {
+    // Kling rend tout le fichier : la seconde entamée est due.
+    expect(billedMediaSeconds('kling-2-6', 6.2)).toBe(7);
+    // Replace coupe la vidéo à la seconde pleine avant l'envoi.
+    expect(billedMediaSeconds('replace', 6.9)).toBe(6);
+    // Un écart de mesure d'un millième ne fait pas basculer la seconde.
+    expect(billedMediaSeconds('replace', 6.9995)).toBe(7);
+    expect(billedMediaSeconds('kling-2-6', 6.0004)).toBe(6);
+  });
+
+  it('exige une vidéo de 4 à 15 s ET un personnage pour Replace', () => {
+    const slots = modeFor('replace')!.slots;
+    expect(slots.map((s) => [s.media, s.requirement])).toEqual([
+      ['video', 'required'],
+      ['image', 'required'],
+    ]);
+    // Bornes de MiniMax H3 : rendu de 4 à 15 s, de la même durée que la source.
+    expect(slots[0]).toMatchObject({ minSeconds: 4, maxSeconds: 15, drivesDuration: true });
   });
 
   it('exige image ET vidéo pour le transfert de mouvement', () => {

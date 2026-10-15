@@ -85,6 +85,10 @@ const MESSAGES: Record<string, string> = {
   // Fichiers
   INVALID_FILE_CONTENT: 'Ce fichier ne correspond pas à son extension annoncée.',
   STORAGE_NOT_CONFIGURED: 'Le stockage de fichiers n’est pas configuré sur cette instance.',
+  INVALID_MIME: 'Ce format de fichier n’est pas accepté.',
+  FILE_TOO_LARGE: 'Ce fichier est trop lourd.',
+  UPLOAD_FAILED: 'L’envoi a échoué. Réessayez.',
+  UPLOAD_NOT_FOUND: 'Le fichier envoyé est introuvable. Ajoutez-le à nouveau.',
 
   // Avatars
   AVATAR_NOT_FOUND: 'Ce personnage n’existe pas ou a été supprimé.',
@@ -104,6 +108,8 @@ const MESSAGES: Record<string, string> = {
   MEDIA_TOO_MANY: 'Trop de fichiers pour cet emplacement.',
   PROMPT_TOO_LONG: 'Description trop longue pour ce modèle.',
   MEDIA_URL_INVALID: 'Un des fichiers n’est pas accessible.',
+  MEDIA_TOO_SHORT: 'La vidéo est trop courte pour ce modèle.',
+  MEDIA_PROBE_FAILED: 'Impossible de lire la durée de la vidéo. Réessayez dans un instant.',
   PROVIDER_NOT_CONFIGURED: 'La génération n’est pas configurée sur cette instance.',
   PROVIDER_UNAVAILABLE: 'Le service de génération est momentanément indisponible. Réessayez.',
 

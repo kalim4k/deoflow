@@ -116,6 +116,24 @@ export const AI_MODELS: AiModel[] = [
     active: true,
   },
   {
+    slug: 'replace',
+    name: 'Replace',
+    // Le moteur est MiniMax H3 ; ce que Deoflow ajoute — le gabarit, l'analyse
+    // du mouvement, le recalage et le son d'origine — ne fait pas un modèle. Le
+    // catalogue ne raconte rien de faux : il le dit.
+    provider: 'MiniMax',
+    kind: 'video',
+    tagline: 'Votre personnage à la place de la personne filmée.',
+    description:
+      'Donnez une vidéo où quelqu’un bouge, danse ou pose, et l’image de votre personnage : la personne est remplacée, avec les mêmes gestes au même moment, la même caméra, le même décor et le son d’origine. Propulsé par MiniMax H3 — Deoflow analyse le mouvement de votre vidéo pour que le personnage le suive au plus près. De 4 à 15 secondes. N’utilisez que des vidéos que vous avez le droit de reprendre.',
+    trait: 'quality',
+    // Le format suit la vidéo source : rien à choisir.
+    ratios: [],
+    etaSeconds: 240,
+    illustration: '/models/replace',
+    active: true,
+  },
+  {
     slug: 'gemini-omni-flash',
     name: 'Gemini Omni Flash',
     provider: 'Google',

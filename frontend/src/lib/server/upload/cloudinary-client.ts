@@ -49,6 +49,11 @@ export interface UploadResult {
   secureUrl: string;
   /** Stored byte length. */
   bytes: number;
+  /**
+   * Durée en secondes, pour une vidéo ou un son. Cloudinary la mesure sur le
+   * fichier lui-même : c'est la seule durée sur laquelle on peut facturer.
+   */
+  duration?: number | undefined;
 }
 
 let _configured = false;
@@ -121,7 +126,24 @@ export async function uploadBuffer(
     publicId: res.public_id,
     secureUrl: res.secure_url,
     bytes: typeof res.bytes === 'number' ? res.bytes : body.length,
+    duration: typeof res.duration === 'number' ? res.duration : undefined,
   };
+}
+
+/**
+ * Le SDK configuré, pour ce qui ne se résume pas à un envoi : adresses
+ * transformées, signature d'un envoi direct, lecture d'une ressource.
+ * Lève `StorageNotConfiguredError` comme `uploadBuffer`.
+ */
+export function getCloudinary(): typeof cloudinary {
+  configureOnce();
+  return cloudinary;
+}
+
+/** Préréglage d'envoi configuré, à signer avec un envoi direct. */
+export function uploadPreset(): string | null {
+  configureOnce();
+  return _preset;
 }
 
 /**

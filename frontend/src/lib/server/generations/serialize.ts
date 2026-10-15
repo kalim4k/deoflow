@@ -8,6 +8,20 @@
  */
 import 'server-only';
 import type { GenerationRow } from '@/lib/server/generations/service';
+import { capabilitiesFor } from '@/lib/deoflow/capabilities';
+import { replaceDisplayPrompt } from '@/lib/deoflow/replacePrompt';
+
+/**
+ * Le texte à montrer au créateur. Pour Replace, le prompt stocké est le
+ * gabarit technique envoyé au fournisseur — utile au diagnostic, illisible
+ * dans une galerie. On n'en garde que sa précision à lui.
+ */
+function displayPrompt(row: GenerationRow): string {
+  if (capabilitiesFor(row.modelSlug)?.composition === 'replace') {
+    return replaceDisplayPrompt(row.prompt) || 'Personnage remplacé dans votre vidéo';
+  }
+  return row.prompt;
+}
 
 export interface GenerationDto {
   id: string;
@@ -39,7 +53,7 @@ export function serializeGeneration(row: GenerationRow): GenerationDto {
     modelSlug: row.modelSlug,
     modelName: row.modelName,
     mode: row.mode,
-    prompt: row.prompt,
+    prompt: displayPrompt(row),
     ratio: row.ratio,
     durationSeconds: row.durationSeconds,
     credits: row.credits,

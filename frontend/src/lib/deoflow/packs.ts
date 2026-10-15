@@ -3,7 +3,7 @@ import { CREDIT_FCFA } from './pricing';
 
 // Le crédit s'achète au même prix que chez kie.ai : 5 $ pour 1000 crédits,
 // soit 3000 FCFA. Aucun pack ne remise ce tarif — la marge se prend sur la
-// consommation (3× le coût fournisseur, voir `pricing.ts`), pas sur la vente
+// consommation (3× le coût fournisseur, 2× pour Replace — voir `pricing.ts`), pas sur la vente
 // du crédit. Une remise à l'achat viendrait donc directement rogner cette
 // marge, sans que rien ne le signale.
 //

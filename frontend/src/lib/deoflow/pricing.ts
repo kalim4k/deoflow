@@ -5,7 +5,8 @@
  * crédits pour 3000 FCFA (≈ 5 $), exactement le tarif du fournisseur. Ce qui
  * diffère est la consommation : une génération qui coûte 8 crédits chez kie.ai
  * en coûte 24 chez nous. La marge est donc lisible d'un coup d'œil par le
- * créateur comme par le propriétaire, et tient dans une seule constante.
+ * créateur comme par le propriétaire, et tient dans une seule constante — à
+ * l'exception des modèles listés dans `MODEL_MARGINS`.
  *
  * Les prix ne sont pas recopiés modèle par modèle : on décrit le **coût**
  * kie.ai, et le prix s'en déduit. Recopier un prix, c'est accepter qu'il se
@@ -23,6 +24,26 @@ import { REFERENCE_VIDEO_MAX_SECONDS } from './capabilities';
 
 /** Ce que le créateur paie pour ce que le fournisseur nous coûte. */
 export const MARGIN = 3;
+
+/**
+ * Modèles vendus à une autre marge que `MARGIN` — décision du propriétaire,
+ * modèle par modèle.
+ *
+ * Le back-office en tient compte : le coût fournisseur des statistiques compte
+ * leur consommation à part (`lib/server/admin/stats.ts`). Diviser par 3 ce qui
+ * a été vendu ×2 sous-estimerait ce que kie.ai nous facture.
+ */
+export const MODEL_MARGINS: Readonly<Record<string, number>> = {
+  // ×2 au lieu de ×3, décidé le 15/10/2026. Sans risque de vente à perte : le
+  // coût de Replace est exact, pas un pire cas — la durée facturée est mesurée
+  // par Cloudinary et la vidéo coupée avant d'être transmise.
+  replace: 2,
+};
+
+/** Marge appliquée à un modèle. */
+export function marginFor(slug: string): number {
+  return MODEL_MARGINS[slug] ?? MARGIN;
+}
 
 /** Valeur d'un crédit en FCFA — identique à l'achat chez kie.ai (5 $ = 1000). */
 export const CREDIT_FCFA = 3;
@@ -95,7 +116,17 @@ type KieCost =
    * Mesurer la durée réelle à l'envoi (Cloudinary la renvoie) supprimerait ce
    * compromis ; c'est la bonne correction, elle n'est pas faite.
    */
-  | { kind: 'minimax'; perSecond: number; inputSeconds: number };
+  | { kind: 'minimax'; perSecond: number; inputSeconds: number }
+  /**
+   * Un prix à la seconde appliqué DEUX fois — à la vidéo d'entrée et au rendu,
+   * qui ont la même durée — plus une part fixe.
+   *
+   * Exact, pas un pire cas : le serveur relit la durée de la vidéo chez
+   * Cloudinary et la COUPE à la durée facturée avant de la transmettre
+   * (Replace, `lib/server/replace/`). La part fixe couvre l'analyse de la
+   * vidéo par Gemini (≈ 0,1 crédit kie.ai, relances comprises).
+   */
+  | { kind: 'perSecondInOut'; perSecond: number; fixed: number };
 
 const KIE_COSTS: Record<string, KieCost> = {
   // 8 crédits en 1K (12 en 2K, 18 en 4K — nous verrouillons le 1K).
@@ -126,6 +157,9 @@ const KIE_COSTS: Record<string, KieCost> = {
   // `LOCKED` dans `lib/server/ai/kie.ts`). Les 5 premières images de référence
   // sont offertes, et l'emplacement s'arrête à 5 : aucun supplément possible.
   'minimax-h3': { kind: 'minimax', perSecond: 8, inputSeconds: REFERENCE_VIDEO_MAX_SECONDS },
+  // Replace : MiniMax H3 en 768P (8 crédits la seconde), sur la vidéo source
+  // coupée à la durée du rendu, plus l'analyse Gemini.
+  replace: { kind: 'perSecondInOut', perSecond: 8, fixed: 0.5 },
 };
 
 /** Coût fournisseur d'une génération, en crédits kie.ai. */
@@ -162,6 +196,8 @@ export function kieCost(slug: string, ctx: PriceContext = {}): number | null {
       return ctx.hasVideoInput ? cost.withVideo : cost.base + cost.perSecond * seconds;
     case 'minimax':
       return cost.perSecond * (seconds + (ctx.hasVideoInput ? cost.inputSeconds : 0));
+    case 'perSecondInOut':
+      return cost.perSecond * seconds * 2 + cost.fixed;
   }
 }
 
@@ -174,7 +210,7 @@ export function priceCredits(slug: string, ctx: PriceContext = {}): number | nul
   if (cost === null) return null;
   // Arrondi au crédit supérieur : le fournisseur facture des dixièmes, pas
   // nous. Arrondir vers le bas rognerait la marge sur chaque génération.
-  return Math.ceil(cost * MARGIN);
+  return Math.ceil(cost * marginFor(slug));
 }
 
 /** Une vidéo de référence est-elle jointe ? Vrai dès qu'une URL est une vidéo. */

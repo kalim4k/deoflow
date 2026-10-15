@@ -10,6 +10,10 @@
  * « Générer » rejouerait sinon un appel facturé.
  */
 export const runtime = 'nodejs';
+// Replace analyse la vidéo (Gemini) avant de soumettre : jusqu'à 40 s de plus
+// qu'une génération ordinaire. 60 s est le plafond accepté sur toutes les
+// formules Vercel.
+export const maxDuration = 60;
 
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';

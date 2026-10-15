@@ -13,6 +13,9 @@
  * réutilisable tel quel.
  */
 export const runtime = 'nodejs';
+// Le sondage qui clôt une génération recopie le rendu, et pour Replace le
+// recale chez Cloudinary : quelques secondes de plus qu'un simple sondage.
+export const maxDuration = 60;
 
 import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';

@@ -20,7 +20,10 @@ import {
  * Ce qui compte et que ce faux client vérifie bien : le `where` transmis. Un
  * agrégat juste sur la mauvaise fenêtre reste un chiffre faux.
  */
-function fakePrisma(overrides: Record<string, unknown> = {}) {
+function fakePrisma(
+  overrides: Record<string, unknown> = {},
+  ownMarginDebits: number | null = null,
+) {
   // Un TABLEAU par clé, pas une valeur : `generation.groupBy` est appelé deux
   // fois (le volume, puis les comptes actifs). Écraser garderait le second et
   // rendrait le premier invérifiable.
@@ -44,7 +47,12 @@ function fakePrisma(overrides: Record<string, unknown> = {}) {
         { movement: 'REFUND', _sum: { credits: 300 } },
         { movement: 'ADMIN_ADJUSTMENT', _sum: { credits: 100 } },
       ]),
-      aggregate: record('credit.aggregate', { _sum: { credits: 14_900 } }),
+      // Deux usages, deux clés : l'encours (sans filtre) et les débits des
+      // modèles vendus à leur propre marge (filtrés).
+      aggregate: (args: { where?: unknown }) =>
+        args.where
+          ? record('credit.aggregate.ownMargin', { _sum: { credits: ownMarginDebits } })(args)
+          : record('credit.aggregate', { _sum: { credits: 14_900 } })(args),
     },
     generation: {
       groupBy: record('generation.groupBy', [
@@ -172,6 +180,31 @@ describe('coût fournisseur', () => {
     // vérifie la FORMULE : si la marge passe à 4, le coût affiché doit baisser.
     expect(providerCostFcfa(4_500)).toBe(4_500);
     expect(providerCostFcfa(0)).toBe(0);
+  });
+
+  it('compte à part ce qui est vendu à une autre marge', () => {
+    // 900 crédits Replace vendus ×2 coûtent 450 crédits kie.ai, pas 300 :
+    // 3 600 / 3 + 900 / 2 = 1 650 crédits kie.ai, soit 4 950 FCFA.
+    expect(providerCostFcfa(4_500, [{ credits: 900, margin: 2 }])).toBe(4_950);
+  });
+
+  it('va chercher la consommation de Replace, galerie supprimée comprise', async () => {
+    const { client, calls } = fakePrisma({}, -900);
+    const stats = await computeAdminStats(client, '30d', new Date('2026-08-13T12:00:00Z'));
+    expect(stats.economics.providerCostFcfa).toBe(4_950);
+    expect(stats.economics.marginFcfa).toBe(57_000 - 4_950);
+    // Une génération supprimée laisse son débit sans `generationId` : le
+    // libellé posé au débit le rattache encore au modèle.
+    expect(calls['credit.aggregate.ownMargin']?.[0]).toMatchObject({
+      where: {
+        movement: 'GENERATION',
+        OR: [
+          { generation: { modelSlug: 'replace' } },
+          { generationId: null, label: { startsWith: 'Replace — ' } },
+        ],
+        createdAt: { gte: new Date('2026-07-14T12:00:00Z') },
+      },
+    });
   });
 });
 

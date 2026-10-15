@@ -23,6 +23,7 @@
 //      par le modèle, ou mesurée sur le fichier envoyé.
 
 import type { MediaKind } from './types';
+import { REPLACE_CREATOR_MAX } from './replacePrompt';
 
 const MB = 1024 * 1024;
 
@@ -127,7 +128,22 @@ export type DurationSpec =
   | { kind: 'fixed'; seconds: number }
   | { kind: 'choice'; values: number[]; default: number }
   | { kind: 'range'; min: number; max: number; step: number; default: number }
-  | { kind: 'fromMedia'; slot: string };
+  | {
+      kind: 'fromMedia';
+      slot: string;
+      /**
+       * Arrondi de la durée mesurée. `up` (défaut) : la seconde entamée est
+       * due — le fournisseur rend tout le fichier. `down` : le serveur COUPE la
+       * vidéo à la seconde pleine avant l'envoi, donc on ne facture que ce qui
+       * part (Replace).
+       */
+      rounding?: 'up' | 'down';
+      /**
+       * Le fournisseur attend tout de même la durée en paramètre (`duration`),
+       * bien qu'elle suive le fichier. MiniMax H3 l'exige ; Kling la refuse.
+       */
+      forward?: boolean;
+    };
 
 export interface ModelMode {
   id: string;
@@ -173,6 +189,12 @@ export interface ModelCapabilities {
    * paierait une génération sans son personnage.
    */
   characterRef?: { mode: string; slot: string };
+  /**
+   * Le texte du créateur n'est pas le prompt : le serveur l'insère dans un
+   * gabarit qui lui est propre (`replace` → `lib/deoflow/replacePrompt.ts`).
+   * L'atelier n'affiche donc pas de « prompt envoyé » qui serait faux.
+   */
+  composition?: 'replace';
 }
 
 /* ── Fabriques, pour ne pas recopier les mêmes contraintes ──────────────── */
@@ -615,6 +637,62 @@ export const MODEL_CAPABILITIES: Record<string, ModelCapabilities> = {
     ],
   },
 
+  // Replace — MiniMax H3 derrière un gabarit Deoflow (`replacePrompt.ts`).
+  //
+  // Même endpoint que `minimax-h3`, contrat d'entrée différent : une vidéo
+  // obligatoire dont le serveur relit la durée chez Cloudinary, la COUPE à la
+  // seconde pleine, puis demande exactement cette durée au fournisseur. La
+  // référence et le rendu font donc la même longueur, ce qui rend le prix exact
+  // (`pricing.ts`, `perSecondInOut`) — là où `minimax-h3` facture un plafond.
+  replace: {
+    promptRequirement: 'optional',
+    promptMaxLength: REPLACE_CREATOR_MAX,
+    // Pas d'« adaptive » : le serveur choisit le format le plus proche de la
+    // vidéo source. Laisser le fournisseur décider a donné un rendu carré
+    // quand l'image du personnage était carrée.
+    apiRatios: ['21:9', '16:9', '4:3', '1:1', '3:4', '9:16'],
+    duration: {
+      kind: 'fromMedia',
+      slot: 'reference_video_urls',
+      rounding: 'down',
+      forward: true,
+    },
+    params: [],
+    composition: 'replace',
+    characterRef: { mode: 'replace', slot: 'reference_image_urls' },
+    modes: [
+      {
+        id: 'replace',
+        label: 'Personnage',
+        description:
+          'La personne de votre vidéo est remplacée par votre personnage : mêmes gestes, même caméra, même décor, et le son d’origine.',
+        slots: [
+          {
+            key: 'reference_video_urls',
+            wire: 'array',
+            media: 'video',
+            requirement: 'required',
+            maxCount: 1,
+            // Plafond fournisseur : 50 Mo par vidéo de référence.
+            maxBytes: 50 * MB,
+            accept: VIDEO_MIME,
+            label: 'Vidéo à reprendre',
+            hint: 'MP4 ou MOV, de 4 à 15 s, 50 Mo max. Une personne bien visible, de préférence en pied. Le résultat aura la même durée, à la seconde près.',
+            minSeconds: 4,
+            maxSeconds: 15,
+            drivesDuration: true,
+          },
+          imageSlot({
+            key: 'reference_image_urls',
+            requirement: 'required',
+            label: 'Personnage',
+            hint: 'Une image du personnage, idéalement en pied avec sa tenue. JPG, PNG ou WEBP — 30 Mo.',
+          }),
+        ],
+      },
+    ],
+  },
+
   'gemini-omni-flash': {
     promptRequirement: 'required',
     promptMaxLength: 20_000,
@@ -796,6 +874,22 @@ export function alwaysRequires(slug: string, media: SlotMedia): boolean {
  */
 export function durationDrivingSlots(mode: ModelMode | undefined): MediaSlotSpec[] {
   return (mode?.slots ?? []).filter((slot) => slot.drivesDuration === true);
+}
+
+/**
+ * Secondes facturées pour un fichier de `measured` secondes qui porte la durée.
+ *
+ * Partagé par l'atelier (prix affiché) et le serveur (prix débité) : Kling
+ * arrondit à la seconde supérieure — le fournisseur rend tout le fichier —,
+ * Replace à la seconde inférieure — le serveur coupe la vidéo avant l'envoi.
+ */
+export function billedMediaSeconds(slug: string, measured: number): number {
+  const duration = capabilitiesFor(slug)?.duration;
+  const rounding = duration?.kind === 'fromMedia' ? (duration.rounding ?? 'up') : 'up';
+  // Un millième d'écart de mesure entre le navigateur et Cloudinary ne doit
+  // pas faire basculer la seconde : 6,9995 s se compte 7.
+  const settled = Math.round(measured * 100) / 100;
+  return Math.max(1, rounding === 'down' ? Math.floor(settled) : Math.ceil(settled));
 }
 
 /** Nombre de secondes facturé au minimum — sert au « à partir de » des cartes. */

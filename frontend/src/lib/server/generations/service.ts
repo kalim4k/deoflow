@@ -25,8 +25,15 @@ import {
   InsufficientCreditsError,
   creditCredits,
   debitCredits,
+  getBalance,
   withUserCredits,
 } from '@/lib/server/credits';
+import {
+  ReplaceInputError,
+  composeReplacePrompt,
+  finalizeReplace,
+  prepareReplaceSource,
+} from '@/lib/server/replace';
 import {
   KieError,
   createTask,
@@ -329,7 +336,25 @@ export async function createGeneration(input: CreateGenerationInput): Promise<Ge
   }
 
   assertMediaComplete(withAvatar);
-  const { credits, durationSeconds } = quoteGeneration(withAvatar);
+
+  // Replace : la vidéo est mesurée et coupée AVANT le devis. C'est sa durée
+  // réelle, lue chez Cloudinary, qui fait le prix — pas celle qu'annonce le
+  // navigateur.
+  const composition = capabilitiesFor(input.modelSlug)?.composition;
+  let prepared: CreateGenerationInput = withAvatar;
+  if (composition === 'replace') {
+    const source = await asRequestError(
+      prepareReplaceSource(input.modelSlug, withAvatar.media ?? {}),
+    );
+    prepared = {
+      ...withAvatar,
+      media: source.media,
+      durationSeconds: source.durationSeconds,
+      ratio: source.ratio,
+    };
+  }
+
+  const { credits, durationSeconds } = quoteGeneration(prepared);
 
   const provider = tryCreateKieProvider();
   if (!provider) {
@@ -340,7 +365,27 @@ export async function createGeneration(input: CreateGenerationInput): Promise<Ge
     );
   }
 
-  const mode = modeFor(withAvatar.modelSlug, withAvatar.mode);
+  if (composition === 'replace') {
+    // L'analyse est un appel payant chez kie.ai : inutile de la lancer pour un
+    // solde qui ne couvrira pas la génération. Lecture sans verrou — le débit
+    // revérifie sous verrou, ceci n'évite qu'une dépense perdue.
+    const available = await getBalance(input.userId);
+    if (available < credits) throw new InsufficientCreditsError(credits, available);
+
+    const { prompt, analyzed } = await composeReplacePrompt({
+      provider,
+      media: prepared.media ?? {},
+      seconds: durationSeconds ?? 0,
+      // Le texte du créateur seul : la description de l'avatar a sa propre
+      // place dans le gabarit.
+      note: input.prompt,
+      avatarDescription: avatar?.description ?? null,
+    });
+    if (!analyzed) log.warn('replace: gabarit générique, analyse indisponible');
+    prepared = { ...prepared, prompt };
+  }
+
+  const mode = modeFor(prepared.modelSlug, prepared.mode);
 
   // Étape 1 — débit et insertion, atomiques et sérialisés par utilisateur.
   const row = await withUserCredits(input.userId, async (tx) => {
@@ -354,11 +399,11 @@ export async function createGeneration(input: CreateGenerationInput): Promise<Ge
         // Le prompt ENVOYÉ, description de l'avatar comprise : c'est lui qu'il
         // faudra relire pour diagnostiquer une génération dans six mois, même
         // si l'avatar a changé de description depuis.
-        prompt: withAvatar.prompt,
-        ratio: withAvatar.ratio ?? null,
+        prompt: prepared.prompt,
+        ratio: prepared.ratio ?? null,
         durationSeconds,
-        params: (withAvatar.params ?? {}) as Prisma.InputJsonValue,
-        inputs: (withAvatar.media ?? {}) as Prisma.InputJsonValue,
+        params: (prepared.params ?? {}) as Prisma.InputJsonValue,
+        inputs: (prepared.media ?? {}) as Prisma.InputJsonValue,
         credits,
         status: 'PENDING',
         purpose: input.purpose ?? 'CREATION',
@@ -382,12 +427,12 @@ export async function createGeneration(input: CreateGenerationInput): Promise<Ge
   // de plusieurs secondes ne doit pas tenir un verrou de base ouvert.
   const request: GenerateRequest = {
     modelSlug: model.slug,
-    prompt: withAvatar.prompt,
+    prompt: prepared.prompt,
     ...(mode ? { mode: mode.id } : {}),
-    ...(withAvatar.ratio ? { aspectRatio: withAvatar.ratio } : {}),
+    ...(prepared.ratio ? { aspectRatio: prepared.ratio } : {}),
     ...(durationSeconds !== null ? { durationSeconds } : {}),
-    ...(withAvatar.params ? { params: withAvatar.params } : {}),
-    ...(withAvatar.media ? { media: withAvatar.media } : {}),
+    ...(prepared.params ? { params: prepared.params } : {}),
+    ...(prepared.media ? { media: prepared.media } : {}),
   };
 
   try {
@@ -487,7 +532,10 @@ export async function settleGeneration(row: GenerationRow): Promise<GenerationRo
   }
 
   // Réussite : on recopie avant que les URLs du fournisseur n'expirent.
-  const { stored } = await copyResultsToStorage(state.urls, `generations/${row.userId}/${row.id}`);
+  const { stored, uploads } = await copyResultsToStorage(
+    state.urls,
+    `generations/${row.userId}/${row.id}`,
+  );
   if (stored.length === 0) {
     // Le rendu existe chez kie.ai mais on n'a pas su le conserver. Le
     // créateur ne doit pas payer notre panne de stockage.
@@ -498,13 +546,39 @@ export async function settleGeneration(row: GenerationRow): Promise<GenerationRo
     );
   }
 
+  // Replace : le rendu est recalé sur la durée de la source et reprend son son
+  // d'origine. Jamais bloquant — à défaut, le rendu brut est servi.
+  let assets = stored;
+  const first = uploads[0];
+  if (capabilitiesFor(row.modelSlug)?.composition === 'replace' && first) {
+    const finalUrl = await finalizeReplace({
+      generationId: row.id,
+      inputs: row.inputs,
+      durationSeconds: row.durationSeconds,
+      stored: first,
+    });
+    assets = [finalUrl, ...stored.slice(1)];
+  }
+
   return prisma.generation.update({
     where: { id: row.id },
     data: {
       status: 'SUCCEEDED',
       sourceUrls: state.urls as Prisma.InputJsonValue,
-      assetUrls: stored as Prisma.InputJsonValue,
+      assetUrls: assets as Prisma.InputJsonValue,
       completedAt: new Date(),
     },
   });
+}
+
+/** Un refus de Replace devient un refus de génération ordinaire — avant tout débit. */
+async function asRequestError<T>(work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (err) {
+    if (err instanceof ReplaceInputError) {
+      throw new GenerationRequestError(err.code, err.message, err.status);
+    }
+    throw err;
+  }
 }
